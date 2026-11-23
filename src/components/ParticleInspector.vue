@@ -19,9 +19,55 @@
           {{ p.emission.surface ? '仅表面' : '球体内部' }}
         </button>
       </div>
-      <SliderRow v-if="p.emission.shape !== 'box'" label="半径" :model-value="p.emission.radius" :min="0.01" :max="3" :step="0.01" @begin="edit" @update:model-value="p.emission.radius = $event" />
-      <SliderRow v-if="p.emission.shape === 'cone'" label="锥角" :model-value="p.emission.coneAngle" :min="0" :max="90" :step="0.5" :digits="1" @begin="edit" @update:model-value="p.emission.coneAngle = $event" />
+      <SliderRow
+        v-if="p.emission.shape !== 'box'"
+        label="范围"
+        keyable
+        :keyed="hasTrack('radius')"
+        @key="kf('radius')"
+        :model-value="p.emission.radius"
+        :min="0.01"
+        :max="3"
+        :step="0.01"
+        @begin="edit"
+        @update:model-value="p.emission.radius = $event"
+      />
+      <SliderRow
+        v-if="p.emission.shape === 'cone'"
+        label="锥角"
+        :model-value="p.emission.coneAngle"
+        :min="0"
+        :max="90"
+        :step="0.5"
+        :digits="1"
+        @begin="edit"
+        @update:model-value="p.emission.coneAngle = $event"
+      />
       <VecField v-if="p.emission.shape === 'box'" label="尺寸" :model-value="p.emission.size" @begin="edit" @update:model-value="(v) => (p.emission.size = v as any)" />
+      <SliderRow
+        label="簇"
+        keyable
+        :keyed="hasTrack('clusters')"
+        @key="kf('clusters')"
+        :model-value="p.clusters"
+        :min="1"
+        :max="12"
+        :step="1"
+        :digits="0"
+        @begin="edit"
+        @update:model-value="p.clusters = $event"
+      />
+      <SliderRow
+        v-if="p.clusters > 1"
+        label="簇散布"
+        :model-value="p.clusterRadius"
+        :min="0"
+        :max="3"
+        :step="0.01"
+        @begin="edit"
+        @update:model-value="p.clusterRadius = $event"
+      />
+      <div class="hint">簇 &gt; 1 时，粒子按簇心分成多团火焰，簇散布控制各簇之间的距离。</div>
 
       <div class="row2">
         <span class="rl">寿命</span>
@@ -66,7 +112,18 @@
     </Section>
 
     <Section title="尺寸与颜色">
-      <SliderRow label="基础尺寸" :model-value="p.sizeBase" :min="0.01" :max="4" :step="0.01" @begin="edit" @update:model-value="p.sizeBase = $event" />
+      <SliderRow
+        label="尺寸"
+        keyable
+        :keyed="hasTrack('size')"
+        @key="kf('size')"
+        :model-value="p.sizeBase"
+        :min="0.01"
+        :max="4"
+        :step="0.01"
+        @begin="edit"
+        @update:model-value="p.sizeBase = $event"
+      />
       <div class="block-label">生命内尺寸曲线</div>
       <CurveEditor :model-value="p.sizeCurve" @begin="edit" @update:model-value="p.sizeCurve = $event" />
       <div class="block-label" style="margin-top: 12px">生命内颜色渐变</div>
@@ -124,8 +181,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ParticleDoc } from '../core/types'
-import { S, pushHistory } from '../core/store'
+import type { ParticleDoc, TrackProperty } from '../core/types'
+import { A, S, pushHistory } from '../core/store'
 import { canvasToDataURL } from '../core/textures'
 import Section from './ui/Section.vue'
 import SliderRow from './ui/SliderRow.vue'
@@ -136,6 +193,13 @@ import GradientEditor from './ui/GradientEditor.vue'
 
 const props = defineProps<{ p: ParticleDoc }>()
 const edit = () => pushHistory()
+
+function hasTrack(prop: TrackProperty) {
+  return S.doc.tracks.some((t) => t.targetId === props.p.id && t.property === prop)
+}
+function kf(prop: TrackProperty) {
+  A.addKeyframe(prop, props.p.id)
+}
 
 const texThumb = computed(() => {
   const t = S.doc.textures.find((x) => x.id === props.p.render.textureId)

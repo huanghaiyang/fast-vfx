@@ -84,6 +84,10 @@ export interface ParticleDoc {
   emission: EmissionSettings
   motion: MotionSettings
   sizeBase: number
+  /** 簇数量：一次喷射拆成几个火头，1 = 单簇 */
+  clusters: number
+  /** 簇散布半径（米） */
+  clusterRadius: number
   sizeCurve: Curve
   gradient: Gradient
   brightness: number
@@ -147,7 +151,7 @@ export interface ModelDoc {
 
 export type FXObject = ParticleDoc | ModelDoc
 
-export type TrackProperty = 'position' | 'rotation' | 'scale' | 'opacity'
+export type TrackProperty = 'position' | 'rotation' | 'scale' | 'opacity' | 'radius' | 'clusters' | 'size'
 
 export interface Keyframe {
   t: number

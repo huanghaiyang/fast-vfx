@@ -246,10 +246,22 @@ export async function buildGodotPackage(doc: EffectDoc): Promise<GodotPackage> {
     position: 'position',
     rotation: 'quaternion',
     scale: 'scale',
-    opacity: 'transparency'
+    opacity: 'transparency',
+    radius: 'radius',
+    clusters: 'clusters',
+    size: 'size'
   }
+  // 范围 / 簇 / 尺寸 属于编辑器侧的粒子参数，Godot 节点没有对应属性：导出跳过，取静态值
+  const editorOnly: TrackProperty[] = ['radius', 'clusters', 'size']
+  doc.tracks.forEach((tr) => {
+    if (editorOnly.includes(tr.property) && tr.keys.length) {
+      const msg = `「${propMap[tr.property]}」关键帧仅编辑器内生效，Godot 侧使用静态值`
+      if (!warnings.includes(msg)) warnings.push(msg)
+    }
+  })
   const tracks = doc.tracks
     .filter((tr) => tr.keys.length > 0 && doc.objects.some((o) => o.id === tr.targetId))
+    .filter((tr) => !editorOnly.includes(tr.property))
     .map((tr) => {
       const idx = doc.objects.findIndex((o) => o.id === tr.targetId)
       const keys = tr.keys

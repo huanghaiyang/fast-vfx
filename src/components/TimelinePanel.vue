@@ -67,7 +67,10 @@ const PROP: Record<TrackProperty, string> = {
   position: '位置',
   rotation: '旋转',
   scale: '缩放',
-  opacity: '透明度'
+  opacity: '透明度',
+  radius: '范围',
+  clusters: '簇',
+  size: '尺寸'
 }
 
 const rows = computed(() => {
@@ -149,6 +152,12 @@ function addAllKeys() {
   A.addKeyframe('position')
   A.addKeyframe('rotation')
   A.addKeyframe('scale')
+  const obj = A.selected
+  if (obj && obj.kind === 'particles') {
+    A.addKeyframe('radius')
+    A.addKeyframe('clusters')
+    A.addKeyframe('size')
+  }
 }
 
 function removeTrack(id: string) {

@@ -78,15 +78,17 @@ export interface Preset {
 function buildFire(): EffectDoc {
   const doc = emptyDoc('烈焰')
   doc.duration = 2.5
-  const body = flameBody('火焰体', 130, 0.62, 0.24, 0.16)
+  const body = flameBody('火焰体', 150, 0.6, 0.22, 0.16)
+  body.clusters = 3
+  body.clusterRadius = 0.42
   const fire = createParticle({
     name: '火焰核心',
     transform: { position: [0, 0.35, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
     emission: {
-      rate: 260,
+      rate: 340,
       shape: 'cone',
       radius: 0.2,
-      coneAngle: 15,
+      coneAngle: 17,
       lifetimeMin: 0.5,
       lifetimeMax: 1.0,
       burst: false
@@ -95,10 +97,10 @@ function buildFire(): EffectDoc {
       speedMin: 0.9,
       speedMax: 2.0,
       direction: [0, 1, 0],
-      spread: 18,
+      spread: 26,
       gravity: [0, 1.4, 0],
       damping: 1.3,
-      turbulence: 0.7,
+      turbulence: 0.9,
       turbulenceScale: 1.6,
       swirl: 0.6
     },
@@ -117,9 +119,11 @@ function buildFire(): EffectDoc {
       [1, '#1c0400']
     ]),
     brightness: 0.72,
-    spin: { angleMin: 0, angleMax: 360, speedMin: -32, speedMax: 32, align: 0.85, stretch: 0.11 },
-    render: { textureId: 'tex_flame', blend: 'additive', maxCount: 2600, opacity: 0.4, fadeIn: 0.1, fadeOut: 0.4 }
+    spin: { angleMin: 0, angleMax: 360, speedMin: -32, speedMax: 32, align: 0.82, stretch: 0.07 },
+    render: { textureId: 'tex_flame', blend: 'additive', maxCount: 3000, opacity: 0.4, fadeIn: 0.1, fadeOut: 0.4 }
   })
+  fire.clusters = 4
+  fire.clusterRadius = 0.34
 
   const embers = createParticle({
     name: '飞溅火星',
@@ -175,6 +179,25 @@ function buildFire(): EffectDoc {
       [0, [1, 1, 1]],
       [1.2, [1.06, 1.14, 1.06]],
       [2.5, [1, 1, 1]]
+    ]),
+    // 范围 / 簇 / 尺寸 都带关键帧，时间轴上可直接查看与拖动
+    track(fire.id, 'radius', [
+      [0, 0.16],
+      [0.9, 0.34],
+      [1.8, 0.2],
+      [2.5, 0.16]
+    ]),
+    track(fire.id, 'clusters', [
+      [0, 3],
+      [0.9, 5],
+      [1.8, 4],
+      [2.5, 3]
+    ]),
+    track(fire.id, 'size', [
+      [0, 0.34],
+      [0.9, 0.5],
+      [1.8, 0.42],
+      [2.5, 0.36]
     ])
   ]
   doc.camera = { position: [0, 2.3, 5.4], target: [0, 1.1, 0], fov: 42 }
@@ -1527,12 +1550,12 @@ function buildJet(): EffectDoc {
   const jet = createParticle({
     name: '定向喷流',
     transform: { position: [0, 1, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
-    emission: { rate: 760, shape: 'cone', radius: 0.18, coneAngle: 14, lifetimeMin: 0.3, lifetimeMax: 0.62, burst: false },
+    emission: { rate: 560, shape: 'cone', radius: 0.18, coneAngle: 14, lifetimeMin: 0.3, lifetimeMax: 0.62, burst: false },
     motion: {
       speedMin: 4,
       speedMax: 7,
       direction: [0, 0, 1],
-      spread: 10,
+      spread: 13,
       gravity: [0, 0.45, 0],
       damping: 0.9,
       turbulence: 0.5,
@@ -1551,9 +1574,9 @@ function buildJet(): EffectDoc {
       [0.7, '#ff5a10'],
       [1, '#a82400']
     ]),
-    brightness: 0.82,
+    brightness: 0.74,
     spin: { angleMin: 0, angleMax: 360, speedMin: -30, speedMax: 30, align: 0.95, stretch: 0.06 },
-    render: { textureId: 'tex_flame', blend: 'additive', maxCount: 4000, opacity: 0.55, fadeIn: 0.06, fadeOut: 0.4 }
+    render: { textureId: 'tex_flame', blend: 'additive', maxCount: 4000, opacity: 0.46, fadeIn: 0.06, fadeOut: 0.4 }
   })
 
   const smoke = createParticle({
@@ -1898,7 +1921,7 @@ function buildFirestorm(): EffectDoc {
   const twister = createParticle({
     name: '龙卷火焰',
     transform: { position: [0, 0.1, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
-    emission: { rate: 300, shape: 'circle', radius: 1.05, lifetimeMin: 0.9, lifetimeMax: 1.9, burst: false },
+    emission: { rate: 520, shape: 'circle', radius: 1.05, lifetimeMin: 0.9, lifetimeMax: 1.9, burst: false },
     motion: {
       speedMin: 1.2,
       speedMax: 2.4,
@@ -1910,7 +1933,7 @@ function buildFirestorm(): EffectDoc {
       turbulenceScale: 2,
       swirl: 3.4
     },
-    sizeBase: 0.36,
+    sizeBase: 0.22,
     sizeCurve: c([
       [0, 0.4],
       [0.2, 1],
@@ -1927,10 +1950,39 @@ function buildFirestorm(): EffectDoc {
     render: { textureId: 'tex_smoke', blend: 'additive', maxCount: 3200, opacity: 0.5, fadeIn: 0.1, fadeOut: 0.45 }
   })
 
+  const tongues = createParticle({
+    name: '旋绕火舌',
+    transform: { position: [0, 0.15, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+    emission: { rate: 300, shape: 'circle', radius: 0.95, lifetimeMin: 0.55, lifetimeMax: 1.15, burst: false },
+    motion: {
+      speedMin: 1.6,
+      speedMax: 3,
+      direction: [0, 1, 0],
+      spread: 10,
+      gravity: [0, 2.4, 0],
+      damping: 0.45,
+      turbulence: 1.8,
+      turbulenceScale: 1.8,
+      swirl: 4.2
+    },
+    sizeBase: 0.16,
+    sizeCurve: c([
+      [0, 0.45],
+      [0.25, 1],
+      [1, 0.35]
+    ]),
+    gradient: grad([
+      [0, '#fff6d8'],
+      [0.32, '#ffa62e'],
+      [0.78, '#e03400'],
+      [1, '#3a0c00']
+    ]),
+    brightness: 0.95,
+    spin: { angleMin: 0, angleMax: 360, speedMin: -70, speedMax: 70, align: 0.9, stretch: 0.07 },
+    render: { textureId: 'tex_flame', blend: 'additive', maxCount: 2600, opacity: 0.5, fadeIn: 0.08, fadeOut: 0.4 }
+  })
+
   const crown = createParticle({
-    name: '顶部火冠',
-    transform: { position: [0, 2.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
-    emission: { rate: 90, shape: 'sphere', radius: 0.85, lifetimeMin: 0.8, lifetimeMax: 1.6, burst: false },
     motion: {
       speedMin: 0.5,
       speedMax: 1.4,
@@ -1942,7 +1994,7 @@ function buildFirestorm(): EffectDoc {
       turbulenceScale: 2.2,
       swirl: 1.2
     },
-    sizeBase: 0.4,
+    sizeBase: 0.3,
     sizeCurve: c([
       [0, 0.5],
       [0.3, 1.1],
@@ -1988,7 +2040,7 @@ function buildFirestorm(): EffectDoc {
     render: { textureId: 'tex_spark', blend: 'additive', maxCount: 900, opacity: 0.85, fadeIn: 0.05, fadeOut: 0.35 }
   })
 
-  doc.objects = [glowDisc('地面热光', 2.6, 0.34), column, twister, crown, embers]
+  doc.objects = [glowDisc('地面热光', 2.6, 0.34), column, twister, tongues, crown, embers]
   doc.tracks = [
     track(column.id, 'rotation', [
       [0, [0, 0, 0]],

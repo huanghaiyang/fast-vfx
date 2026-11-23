@@ -63,6 +63,8 @@ export function createParticle(overrides: DeepPartial<ParticleDoc> = {}): Partic
       swirl: 0
     },
     sizeBase: 0.4,
+    clusters: 1,
+    clusterRadius: 0,
     sizeCurve: c([
       [0, 0.35],
       [0.25, 1],

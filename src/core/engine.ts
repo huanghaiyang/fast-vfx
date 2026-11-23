@@ -117,7 +117,7 @@ export class FXEngine {
 
     this.composer = new EffectComposer(this.renderer)
     this.composer.addPass(new RenderPass(this.scene, this.camera))
-    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.55, 0.5, 0.8)
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.4, 0.28, 0.86)
     this.composer.addPass(this.bloomPass)
     this.composer.addPass(new OutputPass())
 
@@ -309,6 +309,9 @@ export class FXEngine {
       let sy = scl[1]
       let sz = scl[2]
       let opacity = 1
+      let emitRadius = -1
+      let clusters = -1
+      let sizeBase = -1
       for (const tr of doc.tracks) {
         if (tr.targetId !== rt.id) continue
         const v = this.sampleValue(tr, time)
@@ -327,6 +330,12 @@ export class FXEngine {
           sz = v[2]
         } else if (tr.property === 'opacity' && typeof v === 'number') {
           opacity = v
+        } else if (tr.property === 'radius' && typeof v === 'number') {
+          emitRadius = v
+        } else if (tr.property === 'clusters' && typeof v === 'number') {
+          clusters = v
+        } else if (tr.property === 'size' && typeof v === 'number') {
+          sizeBase = v
         }
       }
       rt.group.position.set(px, py, pz)
@@ -339,6 +348,9 @@ export class FXEngine {
         rt.material.transparent = true
         rt.material.depthWrite = mat.blend === 'opaque' && rt.material.opacity >= 0.999
       } else if (rt.particle) {
+        rt.particle.overrides.radius = emitRadius >= 0 ? emitRadius : null
+        rt.particle.overrides.clusters = clusters >= 0 ? clusters : null
+        rt.particle.overrides.size = sizeBase > 0 ? sizeBase : null
         rt.particle.setOpacity(opacity * rt.particle.doc.render.opacity)
       }
     }

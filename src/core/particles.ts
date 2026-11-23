@@ -130,6 +130,15 @@ export class ParticleSystem {
   doc: ParticleDoc
   texture: THREE.Texture
 
+  /** 时间轴关键帧驱动的运行时覆盖（不改动 doc 本身） */
+  overrides: { radius: number | null; clusters: number | null; size: number | null } = {
+    radius: null,
+    clusters: null,
+    size: null
+  }
+  private clusterPos: Array<[number, number, number]> = [[0, 0, 0]]
+  private clusterKey = ''
+
   constructor(doc: ParticleDoc, textures: TextureAsset[]) {
     this.doc = doc
     this.geo = this.buildGeometry(4)
@@ -249,6 +258,31 @@ export class ParticleSystem {
     this.lutKey = ''
   }
 
+  private clusterCount() {
+    const n = this.overrides.clusters ?? this.doc.clusters ?? 1
+    return Math.max(1, Math.min(12, Math.round(n)))
+  }
+
+  /** 簇的分布中心：多簇时落在一条错落圆环上，单簇就是原点 */
+  private ensureClusters() {
+    const n = this.clusterCount()
+    const rad = Math.max(0, this.doc.clusterRadius ?? 0)
+    const key = `${n}|${rad.toFixed(3)}`
+    if (key === this.clusterKey) return
+    this.clusterKey = key
+    const out: Array<[number, number, number]> = []
+    for (let i = 0; i < n; i++) {
+      if (n === 1) {
+        out.push([0, 0, 0])
+        continue
+      }
+      const a = (i / n) * Math.PI * 2 + 0.55
+      const r = rad * (0.58 + 0.42 * (i % 2 === 0 ? 1 : 0.72))
+      out.push([Math.cos(a) * r, 0.02 * (i % 2), Math.sin(a) * r])
+    }
+    this.clusterPos = out
+  }
+
   applySettings(textures: TextureAsset[]) {
     const r = this.doc.render
     this.mesh.visible = this.doc.visible
@@ -329,10 +363,14 @@ export class ParticleSystem {
     const s = this.doc.spin
     const i = this.count++
 
+    this.ensureClusters()
+    const cp = this.clusterPos[Math.floor(Math.random() * this.clusterPos.length)] || [0, 0, 0]
+    const emitRadius = this.overrides.radius ?? e.radius
+
     const shape: ShapeKind = e.shape
-    let ox = 0
-    let oy = 0
-    let oz = 0
+    let ox = cp[0]
+    let oy = cp[1]
+    let oz = cp[2]
     let nx = 0
     let ny = 0
     let nz = 0
@@ -345,39 +383,39 @@ export class ParticleSystem {
         const v = Math.random()
         const theta = u * Math.PI * 2
         const phi = Math.acos(2 * v - 1)
-        const rad = e.surface ? e.radius : e.radius * Math.cbrt(Math.random())
+        const rad = e.surface ? emitRadius : emitRadius * Math.cbrt(Math.random())
         nx = Math.sin(phi) * Math.cos(theta)
         ny = Math.cos(phi)
         nz = Math.sin(phi) * Math.sin(theta)
-        ox = nx * rad
-        oy = ny * rad
-        oz = nz * rad
+        ox += nx * rad
+        oy += ny * rad
+        oz += nz * rad
         break
       }
       case 'box':
-        ox = rnd(-e.size[0] / 2, e.size[0] / 2)
-        oy = rnd(-e.size[1] / 2, e.size[1] / 2)
-        oz = rnd(-e.size[2] / 2, e.size[2] / 2)
+        ox += rnd(-e.size[0] / 2, e.size[0] / 2)
+        oy += rnd(-e.size[1] / 2, e.size[1] / 2)
+        oz += rnd(-e.size[2] / 2, e.size[2] / 2)
         break
       case 'circle': {
         const a = Math.random() * Math.PI * 2
-        const r = e.radius * Math.sqrt(Math.random())
-        ox = Math.cos(a) * r
-        oz = Math.sin(a) * r
+        const r = emitRadius * Math.sqrt(Math.random())
+        ox += Math.cos(a) * r
+        oz += Math.sin(a) * r
         break
       }
       case 'ring': {
         const a = Math.random() * Math.PI * 2
-        const r = e.radius + rnd(-0.06, 0.06) * e.radius
-        ox = Math.cos(a) * r
-        oz = Math.sin(a) * r
+        const r = emitRadius + rnd(-0.06, 0.06) * emitRadius
+        ox += Math.cos(a) * r
+        oz += Math.sin(a) * r
         break
       }
       case 'cone': {
         const a = Math.random() * Math.PI * 2
-        const r = e.radius * Math.sqrt(Math.random())
-        ox = Math.cos(a) * r
-        oz = Math.sin(a) * r
+        const r = emitRadius * Math.sqrt(Math.random())
+        ox += Math.cos(a) * r
+        oz += Math.sin(a) * r
         break
       }
       default:
@@ -542,7 +580,8 @@ export class ParticleSystem {
       col[i * 4 + 3] = Math.min(1, fi, fo, 1)
 
       const si = Math.min(63, Math.round(lt * 63))
-      siz[i] = this.doc.sizeBase * curve[si] * jitter
+      const baseSize = this.overrides.size ?? this.doc.sizeBase
+      siz[i] = baseSize * curve[si] * jitter
 
       rot[i] = this.angle[i]
       sd[i] = this.seed[i]

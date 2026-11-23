@@ -172,14 +172,11 @@ export const A = {
     const obj = S.doc.objects.find((o) => o.id === targetId)
     if (!obj) return
     pushHistory()
-    const value =
-      property === 'position'
-        ? ([...obj.transform.position] as Vec3)
-        : property === 'rotation'
-          ? ([...obj.transform.rotation] as Vec3)
-          : property === 'scale'
-            ? ([...obj.transform.scale] as Vec3)
-            : 1
+    const value = readProperty(obj, property)
+    if (value === null) {
+      toast('该对象没有这个参数', 'warn')
+      return
+    }
     const existing = S.doc.tracks.find((t) => t.targetId === targetId && t.property === property)
     if (!existing) S.doc.tracks.push({ id: `tr${Date.now()}`, targetId, property, keys: [], smooth: true })
     mergeTrack(S.doc.tracks, targetId, property, Number(S.time.toFixed(3)), value)
@@ -226,9 +223,8 @@ export const A = {
     if (!tr || !obj) return
     const key = tr.keys[index]
     if (!key) return
-    if (tr.property === 'position') key.v = [...obj.transform.position] as Vec3
-    else if (tr.property === 'rotation') key.v = [...obj.transform.rotation] as Vec3
-    else if (tr.property === 'scale') key.v = [...obj.transform.scale] as Vec3
+    const v = readProperty(obj, tr.property)
+    if (v !== null) key.v = v
     S.version++
   },
 
@@ -247,8 +243,20 @@ export const A = {
   }
 }
 
-function mergeTextures(doc: EffectDoc): EffectDoc['textures'] {
-  const ids = new Set(doc.textures.map((t) => t.id))
+/** 读取轨道对应的当前值；粒子参数走专属字段 */
+function readProperty(obj: FXObject, property: TrackProperty): number | Vec3 | null {
+  if (property === 'position') return [...obj.transform.position] as Vec3
+  if (property === 'rotation') return [...obj.transform.rotation] as Vec3
+  if (property === 'scale') return [...obj.transform.scale] as Vec3
+  if (property === 'opacity') return obj.kind === 'particles' ? obj.render.opacity : obj.material.opacity
+  if (obj.kind !== 'particles') return null
+  if (property === 'radius') return obj.emission.radius
+  if (property === 'clusters') return obj.clusters
+  if (property === 'size') return obj.sizeBase
+  return null
+}
+
+function mergeTextures(doc: EffectDoc): EffectDoc['textures'] {  const ids = new Set(doc.textures.map((t) => t.id))
   const out = doc.textures.map((t) => {
     const base = BASE_TEXTURES.find((b) => b.id === t.id)
     return base ? { ...base, ...t } : t

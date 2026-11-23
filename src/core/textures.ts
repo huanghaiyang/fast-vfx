@@ -133,20 +133,36 @@ export const GENERATORS: GenDef[] = [
         return u * u * (3 - 2 * u)
       }
       pixelAlpha(ctx, size, (u, v) => {
-        // 高斯软边火丝：没有硬轮廓，几十片叠起来才会融成一团火
-        const yy = 1 - v
-        const wander = (fbm(u * 2.4 + seed, v * 2.2, seed + 4, 3) - 0.5) * 0.12
-        const dist = Math.abs(u - 0.5 + wander)
-        const sigma = 0.085 * (1 - yy * 0.42) + 0.012
-        const lateral = Math.exp(-(dist * dist) / (sigma * sigma))
-        if (lateral <= 0.002) return 0
-        const filament = fbm(u * 11 + seed * 0.6, v * 2.2 + seed * 0.2, seed + 41, 3)
-        const n = fbm(u * 5 + seed, v * 4, seed, 4)
-        // 底部厚、顶部收细，中间被丝状噪声切断
-        const taper = 0.35 + 0.65 * Math.pow(1 - yy, 0.8)
-        const body = lateral * taper * (0.34 + n * 0.78 + filament * 0.5)
-        const vfade = smooth(0, 0.1, v) * smooth(1, 0.9, v) * (0.25 + 0.75 * smooth(0.25, 0.9, v))
-        return Math.min(1.5, body * vfade)
+        const yy = 1 - v // 0 = 顶部, 1 = 底部
+        // 域扭曲：整条火舌会随高度左右摆，边缘不再是几何形状
+        const wx = (fbm(u * 3.2 + seed, v * 2.1, seed + 11, 3) - 0.5) * 0.16
+        const uu = u + wx
+
+        // 三条火舌叠加：底部合并成一根，越往上越散开、越细
+        const spread = 0.18 + yy * 0.95
+        const l1 = (fbm(v * 1.7, seed * 0.3, seed + 21, 2) - 0.5) * 0.36
+        const l2 = (fbm(v * 2.4, seed * 0.5, seed + 31, 2) - 0.5) * 0.5
+        const l3 = (fbm(v * 1.2, seed * 0.7, seed + 41, 2) - 0.5) * 0.62
+        const wob = { w: 0.86 + yy * 1.5 }
+        const g = (c: number, w: number) => {
+          const d = (uu - (0.5 + c * spread)) / (w * wob.w)
+          return Math.exp(-d * d * 2.1)
+        }
+        const lateral = g(l1, 0.075) + g(l2, 0.05) * 0.85 + g(l3, 0.038) * 0.7
+        if (lateral < 0.005) return 0
+
+        // 丝状断口：竖直拉伸的高频噪声，让火舌有撕裂、有缺口
+        const fil = fbm(uu * 13 + seed * 2.2, v * 3.2 + seed * 0.4, seed + 51, 4)
+        const fil2 = fbm(uu * 26 + seed * 1.7, v * 6.5, seed + 61, 3)
+        const fireBreak = 0.34 + 0.5 * fil + 0.28 * fil2
+
+        // 竖向包络：底部厚实、顶部收成细尖，两端都做软过渡
+        const vert = Math.pow(smooth(0.04, 0.62, v), 0.9) * smooth(1, 0.9, v) * smooth(0, 0.05, v)
+        const body = Math.min(1.25, lateral * fireBreak * vert * 1.15)
+
+        // 底部白热核心
+        const core = Math.pow(lateral, 3.2) * Math.pow(smooth(0.52, 1, v), 1.6) * 0.55
+        return body + core
       })
     }
   },
@@ -391,7 +407,9 @@ export function getTexture(
   if (asset.dataUrl) {
     texture = loader.load(asset.dataUrl)
   } else {
-    texture = new THREE.CanvasTexture(getCanvas(asset.gen, asset.params, 512))
+    // 火焰贴图细节多，单独用更高分辨率，避免叠大后糊成一块
+    const res = asset.gen === 'flame' ? 1024 : 512
+    texture = new THREE.CanvasTexture(getCanvas(asset.gen, asset.params, res))
   }
   texture.colorSpace = THREE.SRGBColorSpace
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping
