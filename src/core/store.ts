@@ -2,6 +2,7 @@ import { reactive, watch } from 'vue'
 import type { EffectDoc, FXObject, Keyframe, Track, TrackProperty, Vec3 } from './types'
 import { BASE_TEXTURES, cloneDoc, createImportedModel, createModel, createParticle, emptyDoc, mergeTrack } from './doc'
 import { PRESETS } from './presets'
+import { sampleTrack } from './curve'
 import type { FXEngine, GizmoMode } from './engine'
 import type { GeoKind, ModelAsset } from './types'
 import { deleteModelData, getModelData, putModelData } from './assetStore'
@@ -269,6 +270,27 @@ export const A = {
     pushHistory()
     tr.smooth = smooth
     S.version++
+  },
+
+  /**
+   * 该参数已有轨道时，面板上改值直接写到当前播放头位置的关键帧上，
+   * 否则改动会被轨道覆盖、看起来「调了没反应」。
+   */
+  writeTrackValue(property: TrackProperty, targetId: string, v: number | Vec3) {
+    const existing = S.doc.tracks.find((t) => t.targetId === targetId && t.property === property)
+    if (!existing || !existing.keys.length) return false
+    mergeTrack(S.doc.tracks, targetId, property, Number(S.time.toFixed(3)), v)
+    S.version++
+    return true
+  },
+
+  /** 读取某对象某属性在某个时间点的生效值（考虑轨道覆盖） */
+  valueAtTime(targetId: string, property: TrackProperty, t: number): number | Vec3 | null {
+    const obj = S.doc.objects.find((o) => o.id === targetId)
+    if (!obj) return null
+    const tr = S.doc.tracks.find((x) => x.targetId === targetId && x.property === property)
+    if (tr && tr.keys.length) return sampleTrack(tr, t)
+    return readProperty(obj, property)
   },
 
   moveKey(trackId: string, index: number, t: number) {

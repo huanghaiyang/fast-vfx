@@ -819,6 +819,23 @@ input[type='range']::-moz-range-thumb {
   border: 1px solid var(--line);
   background: #0a0c12;
 }
+.row2.tex-head {
+  align-items: center;
+}
+.texnow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.texnow b {
+  font-size: 11px;
+  color: #dfe6f4;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .empty-hint {
   margin: 14px 12px;
   border: 1px solid var(--line-soft);

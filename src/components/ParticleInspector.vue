@@ -25,12 +25,12 @@
         keyable
         :keyed="hasTrack('radius')"
         @key="kf('radius')"
-        :model-value="p.emission.radius"
+        :model-value="live('radius', p.emission.radius)"
         :min="0.01"
         :max="3"
         :step="0.01"
         @begin="edit"
-        @update:model-value="p.emission.radius = $event"
+        @update:model-value="setLive('radius', $event, (v) => (p.emission.radius = v))"
       />
       <SliderRow
         v-if="p.emission.shape === 'cone'"
@@ -49,13 +49,13 @@
         keyable
         :keyed="hasTrack('clusters')"
         @key="kf('clusters')"
-        :model-value="p.clusters"
+        :model-value="live('clusters', p.clusters)"
         :min="1"
         :max="12"
         :step="1"
         :digits="0"
         @begin="edit"
-        @update:model-value="p.clusters = $event"
+        @update:model-value="setLive('clusters', $event, (v) => (p.clusters = Math.round(v)))"
       />
       <SliderRow
         v-if="p.clusters > 1"
@@ -117,12 +117,12 @@
         keyable
         :keyed="hasTrack('size')"
         @key="kf('size')"
-        :model-value="p.sizeBase"
+        :model-value="live('size', p.sizeBase)"
         :min="0.01"
         :max="4"
         :step="0.01"
         @begin="edit"
-        @update:model-value="p.sizeBase = $event"
+        @update:model-value="setLive('size', $event, (v) => (p.sizeBase = v))"
       />
       <div class="block-label">生命内尺寸曲线</div>
       <CurveEditor :model-value="p.sizeCurve" @begin="edit" @update:model-value="p.sizeCurve = $event" />
@@ -154,15 +154,19 @@
     </Section>
 
     <Section title="渲染">
-      <div class="row2">
+      <div class="row2 tex-head">
         <span class="rl">粒子贴图</span>
-        <div class="inline texline">
+        <span class="texnow">
           <img class="mini" :src="texThumb" alt="" />
-          <select v-model="p.render.textureId">
-            <option v-for="t in S.doc.textures" :key="t.id" :value="t.id">{{ t.name }}</option>
-          </select>
-        </div>
+          <b>{{ texName }}</b>
+        </span>
       </div>
+      <TexturePicker
+        :textures="S.doc.textures"
+        :model-value="p.render.textureId"
+        @pick="edit"
+        @update:model-value="p.render.textureId = $event"
+      />
       <div class="row2">
         <span class="rl">混合</span>
         <select v-model="p.render.blend">
@@ -190,6 +194,7 @@ import NumberField from './ui/NumberField.vue'
 import VecField from './ui/VecField.vue'
 import CurveEditor from './ui/CurveEditor.vue'
 import GradientEditor from './ui/GradientEditor.vue'
+import TexturePicker from './ui/TexturePicker.vue'
 
 const props = defineProps<{ p: ParticleDoc }>()
 const edit = () => pushHistory()
@@ -200,6 +205,22 @@ function hasTrack(prop: TrackProperty) {
 function kf(prop: TrackProperty) {
   A.addKeyframe(prop, props.p.id)
 }
+
+/** 面板显示当前播放头的生效值：有关键帧轨道就在轨道上采样，否则读对象本身 */
+function live(prop: TrackProperty, fallback: number) {
+  if (!hasTrack(prop)) return fallback
+  const v = A.valueAtTime(props.p.id, prop, S.time)
+  return typeof v === 'number' ? v : fallback
+}
+
+/** 有关键帧轨道时，改值写到当前帧，避免被轨道覆盖而看起来「调了没反应」 */
+function setLive(prop: TrackProperty, v: number, apply: (v: number) => void) {
+  const rounded = prop === 'clusters' ? Math.round(v) : v
+  if (A.writeTrackValue(prop, props.p.id, rounded)) return
+  apply(rounded)
+}
+
+const texName = computed(() => S.doc.textures.find((x) => x.id === props.p.render.textureId)?.name || '未选择')
 
 const texThumb = computed(() => {
   const t = S.doc.textures.find((x) => x.id === props.p.render.textureId)

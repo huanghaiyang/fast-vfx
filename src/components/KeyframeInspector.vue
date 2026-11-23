@@ -73,6 +73,20 @@
       </div>
     </Section>
 
+    <Section v-if="keys.length === 1" title="该帧属性快照">
+      <div class="snap" v-for="r in snapshot" :key="r.k">
+        <span class="sl">{{ r.k }}</span>
+        <span class="sv mono" :class="{ hot: r.isCur }">{{ r.v }}</span>
+      </div>
+      <div class="snap static" v-for="r in statics" :key="r.k">
+        <span class="sl">{{ r.k }}</span>
+        <span class="sv mono">{{ r.v }}</span>
+      </div>
+      <div class="hint snap-hint">
+        按该帧时间 {{ (keys[0]?.t ?? 0).toFixed(2) }}s 采样其他轨道；灰底为对象静态参数（不受关键帧影响）。
+      </div>
+    </Section>
+
     <Section v-if="cmp" title="帧间比对">
       <div class="kf-diff" v-if="cmp">
         <div class="drow">
@@ -203,6 +217,45 @@ const cmp = computed(() => {
 function isVec(k: Keyframe) {
   return Array.isArray(k.v)
 }
+
+/** 单帧选中时：该对象所有轨道在 key.t 时刻的采样值 */
+const snapshot = computed(() => {
+  const o = obj.value
+  const k = keys.value[0]
+  if (!o || !k) return []
+  const cur = track.value?.property
+  return S.doc.tracks
+    .filter((t) => t.targetId === o.id)
+    .map((t) => ({
+      k: PROP[t.property] + (t.property === cur ? '（当前帧）' : ''),
+      v: fmtV(sampleTrack(t, k.t)),
+      isCur: t.property === cur
+    }))
+})
+
+/** 该对象的静态参数（不参与关键帧），方便对照这个时刻的形态 */
+const statics = computed(() => {
+  const o = obj.value
+  if (!o) return []
+  if (o.kind === 'particles') {
+    const tex = S.doc.textures.find((t) => t.id === o.render.textureId)
+    return [
+      { k: '发射率 / 秒', v: o.emission.burst ? `爆发 ${o.emission.burstCount}` : o.emission.rate.toFixed(0) },
+      { k: '寿命 / 秒', v: `${o.emission.lifetimeMin.toFixed(2)}~${o.emission.lifetimeMax.toFixed(2)}` },
+      { k: '初始尺寸', v: o.sizeBase.toFixed(3) },
+      { k: '亮度', v: o.brightness.toFixed(2) },
+      { k: '贴图', v: tex ? tex.name : '（无）' },
+      { k: '混合', v: o.render.blend }
+    ]
+  }
+  const p = o.params
+  return [
+    { k: '几何', v: o.geometry },
+    { k: '半径 / 尺寸', v: (p.radius ?? p.size ?? 1).toFixed(3) },
+    { k: '颜色', v: o.material.color },
+    { k: '自发光', v: `${o.material.emissive} × ${o.material.emissiveIntensity.toFixed(2)}` }
+  ]
+})
 
 function fmtV(v: number | Vec3 | null) {
   if (v === null) return '—'
@@ -454,6 +507,42 @@ function removeKey(k: Keyframe) {
   margin-top: 7px;
   font-size: 10px;
   color: #d0a04a;
+  line-height: 1.5;
+}
+.snap {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 6px;
+  align-items: baseline;
+  padding: 3px 5px;
+  border-radius: 4px;
+  font-size: 10.5px;
+}
+.snap:nth-child(odd) {
+  background: #0a0d15;
+}
+.snap.static {
+  color: var(--dim-2);
+}
+.snap .sl {
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.snap .sv {
+  color: #cdd6e8;
+  text-align: right;
+}
+.snap .sv.hot {
+  color: var(--accent);
+  font-weight: 600;
+}
+.snap.static .sv {
+  color: var(--dim);
+}
+.snap-hint {
+  margin-top: 8px;
   line-height: 1.5;
 }
 .kf-hint {

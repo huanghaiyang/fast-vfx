@@ -1528,25 +1528,6 @@ function buildJet(): EffectDoc {
   doc.duration = 2.2
   doc.bg = '#0a0605'
 
-  const nozzle = createModel('torus', {
-    name: '喷射口',
-    transform: { position: [0, 1, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
-    params: { radius: 0.26, tube: 0.024, segments: 48, rings: 10 },
-    material: {
-      color: '#ffb070',
-      emissive: '#ff5a10',
-      emissiveIntensity: 0.5,
-      metalness: 0,
-      roughness: 0.5,
-      opacity: 1,
-      wireframe: false,
-      textureId: '',
-      uvRepeat: 1,
-      flatShading: false,
-      blend: 'additive'
-    }
-  })
-
   const jet = createParticle({
     name: '定向喷流',
     transform: { position: [0, 1, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
@@ -1610,7 +1591,7 @@ function buildJet(): EffectDoc {
     render: { textureId: 'tex_smoke', blend: 'alpha', maxCount: 350, opacity: 0.28, fadeIn: 0.2, fadeOut: 0.55 }
   })
 
-  doc.objects = [nozzle, jet, smoke]
+  doc.objects = [jet, smoke]
   doc.tracks = [
     track(jet.id, 'scale', [
       [0, [0.88, 0.9, 0.94]],
