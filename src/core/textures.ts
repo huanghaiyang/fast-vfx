@@ -8,7 +8,7 @@ function vr(variant: number, k: number): number {
 }
 
 /** 变形 0 = 原版 */
-export const VARIANT_COUNT = 10
+export const VARIANT_COUNT = 20
 
 /* ---------------- 噪声工具 ---------------- */
 function hash2(x: number, y: number, seed: number): number {

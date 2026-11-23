@@ -54,10 +54,10 @@
 
         <div class="pgroup">
           <em>变形贴图</em>
-          <i>{{ variantGroups.length * 10 }}</i>
+          <i>{{ variantGroups.length * VARIANT_COUNT }}</i>
           <span class="pline"></span>
         </div>
-        <div class="phint">每类额外 10 种程序化变形，点缩略图直接套到选中对象。</div>
+        <div class="phint">每类额外 {{ VARIANT_COUNT }} 种程序化变形，点缩略图直接套到选中对象。</div>
         <div class="vg" v-for="g in variantGroups" :key="g.base.id">
           <div class="vgname">{{ g.base.name }}</div>
           <div class="vrow">
@@ -86,7 +86,7 @@ import { PRESETS } from '../core/presets'
 import { GEO_LIST } from '../core/geometry'
 import { BASE_TEXTURES, texVariant } from '../core/doc'
 import { GEO_ICONS } from './icons'
-import { canvasToDataURL } from '../core/textures'
+import { canvasToDataURL, VARIANT_COUNT } from '../core/textures'
 import type { Preset } from '../core/presets'
 import type { TextureAsset } from '../core/types'
 
@@ -106,7 +106,7 @@ const groups = computed(() => {
 const variantGroups = computed(() =>
   BASE_TEXTURES.map((base) => ({
     base,
-    items: Array.from({ length: 10 }, (_, k) => texVariant(base, k + 1))
+    items: Array.from({ length: VARIANT_COUNT }, (_, k) => texVariant(base, k + 1))
   }))
 )
 
