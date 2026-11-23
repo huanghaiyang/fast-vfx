@@ -1,6 +1,6 @@
 <template>
   <div class="tp">
-    <div class="tp-cats">
+    <div class="tp-cats" @wheel="onCatWheel">
       <button
         v-for="c in cats"
         :key="c.id"
@@ -106,6 +106,15 @@ function thumb(t: Item) {
   }
 }
 
+/** 类别条只能横向滚，把竖向滚轮换算成横向位移，省得去抓 4px 滚动条 */
+function onCatWheel(e: WheelEvent) {
+  const el = e.currentTarget as HTMLElement
+  if (!el || el.scrollWidth <= el.clientWidth) return
+  if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
+  el.scrollLeft += e.deltaY
+  e.preventDefault()
+}
+
 function pick(t: Item) {
   emit('pick')
   if (!props.textures.some((x) => x.id === t.id)) {
@@ -126,10 +135,32 @@ function pick(t: Item) {
   display: flex;
   gap: 3px;
   overflow-x: auto;
-  padding-bottom: 5px;
+  overflow-y: hidden;
+  padding: 1px 1px 6px;
   margin-bottom: 5px;
   border-bottom: 1px solid var(--line-soft);
-  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
+}
+/* 横向类别条：6px 圆角细滚动条，无箭头按钮、轨道压暗、滑块半透，悬停变橙 */
+.tp-cats::-webkit-scrollbar {
+  height: 6px;
+}
+.tp-cats::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+.tp-cats::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 3px;
+  margin: 0 2px;
+}
+.tp-cats::-webkit-scrollbar-thumb {
+  background: rgba(125, 140, 168, 0.32);
+  border-radius: 3px;
+}
+.tp-cats:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 138, 61, 0.5);
 }
 .cat {
   flex: 0 0 auto;
@@ -162,6 +193,29 @@ function pick(t: Item) {
   gap: 5px;
   max-height: 236px;
   overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+  overscroll-behavior-y: contain;
+}
+/* 纵向贴图网格：6px 圆角细滚动条，无箭头按钮、轨道压暗、滑块半透，悬停变橙 */
+.tp-grid::-webkit-scrollbar {
+  width: 6px;
+}
+.tp-grid::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+.tp-grid::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 3px;
+}
+.tp-grid::-webkit-scrollbar-thumb {
+  background: rgba(125, 140, 168, 0.32);
+  border-radius: 3px;
+}
+.tp-grid::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 138, 61, 0.5);
 }
 .cell {
   display: flex;

@@ -836,6 +836,42 @@ input[type='range']::-moz-range-thumb {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ---------------- 贴图选择器滚动条：细圆角、无箭头、悬停变橙 ----------------
+   注意：一旦写了 scrollbar-width / scrollbar-color，Chrome 会忽略 ::-webkit-scrollbar-*，
+   所以这里只用 webkit 伪元素定制。 */
+.tp-cats::-webkit-scrollbar {
+  height: 6px;
+}
+.tp-grid::-webkit-scrollbar {
+  width: 6px;
+}
+.tp-cats::-webkit-scrollbar-button,
+.tp-grid::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+.tp-cats::-webkit-scrollbar-track,
+.tp-grid::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 3px;
+}
+.tp-cats::-webkit-scrollbar-thumb,
+.tp-grid::-webkit-scrollbar-thumb {
+  background: rgba(125, 140, 168, 0.42);
+  border-radius: 3px;
+  box-shadow: none;
+}
+.tp-cats::-webkit-scrollbar-thumb:hover,
+.tp-grid::-webkit-scrollbar-thumb:hover,
+.tp-cats:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 138, 61, 0.55);
+}
+.tp-cats::-webkit-scrollbar-corner,
+.tp-grid::-webkit-scrollbar-corner {
+  background: transparent;
+}
 .empty-hint {
   margin: 14px 12px;
   border: 1px solid var(--line-soft);
