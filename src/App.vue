@@ -21,6 +21,7 @@ import Inspector from './components/Inspector.vue'
 import TimelinePanel from './components/TimelinePanel.vue'
 import HelpModal from './components/HelpModal.vue'
 import { S, A, undo, redo, saveProject, restoreAutosave, toast } from './core/store'
+import { texVariant } from './core/doc'
 
 function isTyping(t: EventTarget | null) {
   const el = t as HTMLElement | null
@@ -82,6 +83,21 @@ onMounted(() => {
     if (obj) S.selectedId = obj.id
   }
   if (q.get('help') === '1') S.helpOpen = true
+  // 调试：?texvar=3 把场景里所有基础贴图换成第 3 号变形
+  const tv = parseInt(q.get('texvar') || '', 10)
+  if (tv >= 1 && tv <= 10) {
+    for (const o of S.doc.objects) {
+      const id = o.kind === 'particles' ? o.render.textureId : o.material.textureId
+      if (!id) continue
+      const base = S.doc.textures.find((x) => x.id === id.replace(/_v\d+$/, ''))
+      if (!base || (base.params?.variant ?? 0) > 0) continue
+      const asset = texVariant(base, tv)
+      if (!S.doc.textures.some((x) => x.id === asset.id)) S.doc.textures.push(asset)
+      if (o.kind === 'particles') o.render.textureId = asset.id
+      else o.material.textureId = asset.id
+    }
+    S.version++
+  }
 })
 
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))

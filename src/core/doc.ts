@@ -25,7 +25,21 @@ export function tex(
   gen: string,
   params: Partial<TextureAsset['params']> = {}
 ): TextureAsset {
-  return { id, name, gen, params: { seed: 1, contrast: 1, softness: 0.5, ...params } }
+  return { id, name, gen, params: { seed: 1, contrast: 1, softness: 0.5, variant: 0, ...params } }
+}
+
+/** 由基础贴图派生第 i 个变形（i = 1..10），id 稳定，导出文件名安全 */
+export function texVariant(base: TextureAsset, i: number): TextureAsset {
+  return {
+    id: `${base.id}_v${i}`,
+    name: `${base.name} 变形${i}`,
+    gen: base.gen,
+    params: {
+      ...base.params,
+      variant: i,
+      seed: (base.params.seed || 1) + i * 6 + 3
+    }
+  }
 }
 
 export function createParticle(overrides: DeepPartial<ParticleDoc> = {}): ParticleDoc {

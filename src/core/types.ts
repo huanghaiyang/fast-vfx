@@ -171,7 +171,7 @@ export interface TextureAsset {
   name: string
   gen: string // 程序化生成器 id，空则为上传图
   dataUrl?: string
-  params: { seed: number; contrast: number; softness: number }
+  params: { seed: number; contrast: number; softness: number; variant?: number }
 }
 
 export interface EffectDoc {

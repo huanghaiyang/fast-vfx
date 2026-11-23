@@ -39,7 +39,12 @@ function canvasToBlob(asset: TextureAsset): Promise<Blob> {
   }
   const canvas = getCanvas(
     asset.gen,
-    { seed: asset.params?.seed ?? 1, contrast: asset.params?.contrast ?? 1, softness: asset.params?.softness ?? 0.5 },
+    {
+      seed: asset.params?.seed ?? 1,
+      contrast: asset.params?.contrast ?? 1,
+      softness: asset.params?.softness ?? 0.5,
+      variant: asset.params?.variant ?? 0
+    },
     512
   )
   return new Promise((resolve) => {

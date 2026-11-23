@@ -44,13 +44,36 @@
       <div v-else class="pad">
         <div class="phint">程序化贴图实时生成；也可上传 PNG 作为粒子贴图。</div>
         <div class="grid tex-grid">
-          <button class="tex" v-for="t in S.doc.textures" :key="t.id" @click="pickTexture(t.id)" :title="'应用「' + t.name + '」'">
+          <button class="tex" v-for="t in S.doc.textures.filter((x) => !x.params?.variant)" :key="t.id" @click="pickTexture(t.id)" :title="'应用「' + t.name + '」'">
             <img :src="thumb(t)" alt="" />
             <span class="tn">{{ t.name }}</span>
           </button>
         </div>
         <button class="blank" @click="fileInput?.click()">＋ 上传贴图 (PNG/JPG)</button>
         <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/webp" hidden @change="onUpload" />
+
+        <div class="pgroup">
+          <em>变形贴图</em>
+          <i>{{ variantGroups.length * 10 }}</i>
+          <span class="pline"></span>
+        </div>
+        <div class="phint">每类额外 10 种程序化变形，点缩略图直接套到选中对象。</div>
+        <div class="vg" v-for="g in variantGroups" :key="g.base.id">
+          <div class="vgname">{{ g.base.name }}</div>
+          <div class="vrow">
+            <button
+              class="vtex"
+              :class="{ on: curTexId === t.id }"
+              v-for="(t, i) in g.items"
+              :key="t.id"
+              @click="pickVariant(t)"
+              :title="t.name"
+            >
+              <img :src="thumb(t, 72)" alt="" />
+              <span>{{ i + 1 }}</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </aside>
@@ -61,6 +84,7 @@ import { computed, ref } from 'vue'
 import { S, A, addTexture, selectTexture, toast, pushHistory } from '../core/store'
 import { PRESETS } from '../core/presets'
 import { GEO_LIST } from '../core/geometry'
+import { BASE_TEXTURES, texVariant } from '../core/doc'
 import { GEO_ICONS } from './icons'
 import { canvasToDataURL } from '../core/textures'
 import type { Preset } from '../core/presets'
@@ -79,15 +103,28 @@ const groups = computed(() => {
   return out
 })
 
+const variantGroups = computed(() =>
+  BASE_TEXTURES.map((base) => ({
+    base,
+    items: Array.from({ length: 10 }, (_, k) => texVariant(base, k + 1))
+  }))
+)
+
+const curTexId = computed(() => {
+  const obj = A.selected
+  if (!obj) return ''
+  return obj.kind === 'particles' ? obj.render.textureId : obj.material.textureId
+})
+
 const fileInput = ref<HTMLInputElement>()
 const thumbCache = new Map<string, string>()
 
-function thumb(t: TextureAsset): string {
+function thumb(t: TextureAsset, size = 96): string {
   if (t.dataUrl) return t.dataUrl
-  const key = t.id + '|' + t.gen + '|' + t.params.seed + '|' + t.params.softness
+  const key = `${t.id}|${t.gen}|${t.params.seed}|${t.params.softness}|${t.params.variant ?? 0}|${size}`
   let v = thumbCache.get(key)
   if (!v) {
-    v = canvasToDataURL(t.gen, t.params, 96)
+    v = canvasToDataURL(t.gen, t.params, size)
     thumbCache.set(key, v)
   }
   return v
@@ -100,6 +137,17 @@ function pickTexture(id: string) {
   }
   selectTexture(id)
   toast('贴图已应用', 'ok')
+}
+
+function pickVariant(asset: TextureAsset) {
+  if (!S.selectedId) {
+    toast('先选中一个对象，再点击贴图应用', 'warn')
+    return
+  }
+  const exist = S.doc.textures.find((t) => t.id === asset.id)
+  if (!exist) addTexture({ ...asset })
+  selectTexture(asset.id)
+  toast(`已应用「${asset.name}」`, 'ok')
 }
 
 function onUpload(e: Event) {

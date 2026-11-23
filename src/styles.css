@@ -568,6 +568,53 @@ input[type='range']::-moz-range-thumb {
   border-color: var(--accent);
 }
 
+/* 变形贴图浏览 */
+.vg {
+  margin-top: 8px;
+}
+.vgname {
+  font-size: 11px;
+  color: var(--dim);
+  margin-bottom: 4px;
+}
+.vrow {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+.vtex {
+  position: relative;
+  padding: 2px;
+  background:
+    repeating-conic-gradient(#12151f 0% 25%, #171b26 0% 50%) 50% / 8px 8px;
+  border-radius: 4px;
+}
+.vtex img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 3px;
+}
+.vtex span {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  font-size: 9px;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 3px;
+  color: #cfd4e0;
+  background: rgba(0, 0, 0, 0.55);
+}
+.vtex:hover {
+  border-color: var(--accent);
+}
+.vtex.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
 /* ---------------- 属性面板 ---------------- */
 .obj-head {
   display: flex;
