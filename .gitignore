@@ -36,3 +36,4 @@ tmp-capture-*/
 .build.log
 .tsc2.log
 .tsc.log
+.tsc3.log

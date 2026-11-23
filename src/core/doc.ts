@@ -107,6 +107,8 @@ export function createParticle(overrides: DeepPartial<ParticleDoc> = {}): Partic
       opacity: 1,
       fadeIn: 0.12,
       fadeOut: 0.35,
+      mode: 'billboard',
+      meshGeo: 'shard',
       flipbook: { enabled: false, cols: 4, rows: 4, holdLast: true, fps: 20 }
     },
     collide: { enabled: false, floor: 0, bounce: 0.35, friction: 0.7, kill: false },
@@ -231,6 +233,8 @@ export function normalizeDoc(doc: EffectDoc): EffectDoc {
     if (!o.spinCurve) o.spinCurve = { points: [{ t: 0, v: 1 }, { t: 1, v: 1 }] }
     if (!o.collide) o.collide = { enabled: false, floor: 0, bounce: 0.35, friction: 0.7, kill: false }
     if (!o.render.flipbook) o.render.flipbook = { enabled: false, cols: 4, rows: 4, holdLast: true, fps: 20 }
+    if (!o.render.mode) o.render.mode = 'billboard'
+    if (!o.render.meshGeo) o.render.meshGeo = 'shard'
     if (!o.sub) o.sub = { enabled: false, targetId: '', trigger: 'death', count: 6, inherit: 0.4, spread: 55 }
   }
   return doc

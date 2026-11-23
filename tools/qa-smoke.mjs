@@ -92,6 +92,12 @@ const expr = `(async () => {
       ])
       .filter(Boolean)
     const flip = S.doc.objects.filter((o) => o.kind === 'particles' && o.render.flipbook && o.render.flipbook.enabled)
+    // 实体粒子检查：实例化网格真的建起来了、有实例色、有几何
+    const meshParts = [...eng.runtimes.values()].filter((r) => r.particle && r.particle.doc.render.mode === 'mesh')
+    const meshBad = meshParts.filter((r) => {
+      const p = r.particle
+      return !p.inst || !p.inst.geometry || !p.inst.instanceColor || p.inst.count <= 0 || !p.inst.visible
+    }).map((r) => r.particle.doc.name)
     out.push({
       id: p.id,
       name: p.name,
@@ -100,6 +106,8 @@ const expr = `(async () => {
       totalAlive: alive.reduce((s, a) => s + a.n, 0),
       flipbook: flip.length,
       collide: S.doc.objects.filter((o) => o.kind === 'particles' && o.collide && o.collide.enabled).length,
+      mesh: meshParts.length,
+      meshBad,
       badFields
     })
   }
@@ -115,10 +123,11 @@ for (const row of rows) {
   if (row.objects <= 0) issues.push('无对象')
   if (row.totalAlive <= 0) issues.push('0.2s 时无存活粒子')
   if (row.badFields.length) issues.push('缺字段 ' + row.badFields.join('/'))
+  if (row.meshBad && row.meshBad.length) issues.push('实体粒子未建设例 ' + row.meshBad.join('/'))
   const status = issues.length ? 'FAIL' : 'ok'
   if (issues.length) failed++
   console.log(
-    `${status.padEnd(4)} ${row.id.padEnd(12)} ${String(row.totalAlive).padStart(5)} 粒子存活 | flip ${row.flipbook} | collide ${row.collide}${issues.length ? ' | ' + issues.join('; ') : ''}`
+    `${status.padEnd(4)} ${row.id.padEnd(12)} ${String(row.totalAlive).padStart(5)} 粒子存活 | flip ${row.flipbook} | collide ${row.collide} | mesh ${row.mesh}${issues.length ? ' | ' + issues.join('; ') : ''}`
   )
 }
 if (errors.length) {

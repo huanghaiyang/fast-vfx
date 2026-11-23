@@ -290,7 +290,7 @@ export class FXEngine {
     group.add(picker)
     if (obj.kind === 'particles') {
       const particle = new ParticleSystem(obj, this.state.doc.textures)
-      group.add(particle.mesh)
+      group.add(particle.root)
       return { id: obj.id, kind: 'particles', group, picker, particle, opacity: 1 }
     }
     return { id: obj.id, kind: 'model', group, picker, opacity: 1 }

@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { ParticleDoc, ShapeKind, TextureAsset } from './types'
+import type { MeshParticleGeo, ParticleDoc, ShapeKind, TextureAsset } from './types'
 import { buildCurveLUT, buildGradientLUT, clamp, lerp } from './curve'
 import { getTexture } from './textures'
 
@@ -125,6 +125,22 @@ const UP = new THREE.Vector3(0, 1, 0)
 
 export class ParticleSystem {
   readonly mesh: THREE.Mesh
+  /** 外壳：同时装 billboard 贴片与实例化实体几何，引擎只挂这个 */
+  readonly root = new THREE.Group()
+  private inst?: THREE.InstancedMesh
+  private instKey = ''
+  private instMat = new THREE.MeshStandardMaterial({
+    // 颜色完全来自 InstancedMesh.instanceColor；打开 vertexColors 会因几何体没有 color 属性而走错分支
+    vertexColors: false,
+    metalness: 0.1,
+    roughness: 0.8,
+    emissive: new THREE.Color(0x0d0502),
+    emissiveIntensity: 0.2,
+    flatShading: true
+  })
+  private dummy = new THREE.Object3D()
+  private tmpColor = new THREE.Color()
+
   private geo: THREE.InstancedBufferGeometry
   private mat: THREE.ShaderMaterial
   private attrs: {
@@ -247,6 +263,8 @@ export class ParticleSystem {
     this.mesh.visible = doc.visible
     // 拾取交给发射器的代理球，粒子网格不参与射线检测
     this.mesh.raycast = () => {}
+    this.root.add(this.mesh)
+    this.root.frustumCulled = false
     this.attrs = {
       pos: this.geo.getAttribute('iPos') as THREE.InstancedBufferAttribute,
       vel: this.geo.getAttribute('iVel') as THREE.InstancedBufferAttribute,
@@ -266,6 +284,72 @@ export class ParticleSystem {
 
   private findTexture(textures: TextureAsset[]) {
     return textures.find((t) => t.id === this.doc.render.textureId)
+  }
+
+  /** 实体粒子：每帧写实例矩阵与颜色（alpha 折进颜色，近似的透明衰减） */
+  private flushInst(n: number, col: Float32Array, siz: Float32Array) {
+    const inst = this.inst
+    if (!inst) return
+    const d = this.dummy
+    for (let i = 0; i < n; i++) {
+      const s = Math.max(0.001, siz[i] * 1.15)
+      d.position.set(this.px[i], this.py[i], this.pz[i])
+      const a = this.angle[i]
+      const sd = this.seed[i]
+      // 两个附加轴让碎片翻滚，而不是像纸片一样只绕 Z 转
+      d.rotation.set(a * 1.2 + sd * 6.283, a * 0.75 + sd * 4.1, a)
+      d.scale.setScalar(s)
+      d.updateMatrix()
+      inst.setMatrixAt(i, d.matrix)
+      const alpha = Math.min(1, col[i * 4 + 3])
+      const tint = 0.95 * (0.45 + 0.55 * alpha)
+      // 实体走光照材质，颜色按 0..1 归一，避免亮部全部过曝成白块
+      this.tmpColor.setRGB(
+        Math.min(1, col[i * 4] * tint),
+        Math.min(1, col[i * 4 + 1] * tint),
+        Math.min(1, col[i * 4 + 2] * tint)
+      )
+      inst.setColorAt(i, this.tmpColor)
+    }
+    inst.count = n
+    inst.instanceMatrix.needsUpdate = true
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true
+  }
+
+  /** 实体粒子的几何：碎片/方块/晶体/碎石 */
+  private meshGeometry(kind: MeshParticleGeo): THREE.BufferGeometry {
+    switch (kind) {
+      case 'box':
+        return new THREE.BoxGeometry(0.7, 0.7, 0.7, 1, 1, 1)
+      case 'crystal':
+        return new THREE.OctahedronGeometry(0.62, 0)
+      case 'rock':
+        return new THREE.DodecahedronGeometry(0.6, 0)
+      default:
+        return new THREE.TetrahedronGeometry(0.62, 0)
+    }
+  }
+
+  /** 按需创建/重建实例化实体几何（数量或形状变了就重建） */
+  private ensureInst() {
+    const key = `${this.doc.render.meshGeo || 'shard'}|${this.max}`
+    if (this.inst && this.instKey === key) return
+    if (this.inst) {
+      this.root.remove(this.inst)
+      this.inst.geometry.dispose()
+      this.inst.dispose()
+      this.inst = undefined
+    }
+    const mesh = new THREE.InstancedMesh(this.meshGeometry(this.doc.render.meshGeo || 'shard'), this.instMat, this.max)
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+    mesh.frustumCulled = false
+    mesh.count = 0
+    mesh.raycast = () => {}
+    mesh.castShadow = false
+    mesh.renderOrder = 3
+    this.inst = mesh
+    this.instKey = key
+    this.root.add(mesh)
   }
 
   private buildGeometry(max: number): THREE.InstancedBufferGeometry {
@@ -292,8 +376,7 @@ export class ParticleSystem {
     return geo
   }
 
-  setMax(max: number) {
-    max = Math.round(clamp(max, 1, 20000))
+  setMax(max: number) {    max = Math.round(clamp(max, 1, 20000))
     if (max === this.max && this.count >= 0 && this.px.length === max) return
     this.max = max
     this.count = 0
@@ -406,7 +489,21 @@ export class ParticleSystem {
       this.texture = tex
       this.mat.uniforms.uMap.value = tex
     }
+    this.root.visible = this.doc.visible
     if (r.maxCount !== this.max) this.setMax(r.maxCount)
+    // 实体几何模式：贴片隐藏，实例化几何接管
+    const meshMode = r.mode === 'mesh'
+    this.mesh.visible = !meshMode
+    if (meshMode) {
+      this.ensureInst()
+      if (this.inst) this.inst.visible = true
+      this.instMat.blending = r.blend === 'additive' ? THREE.AdditiveBlending : THREE.NormalBlending
+      this.instMat.transparent = r.blend === 'additive'
+      this.instMat.opacity = r.opacity
+      this.instMat.needsUpdate = true
+    } else if (this.inst) {
+      this.inst.visible = false
+    }
     // 序列帧：只有开了 flipbook 且贴图确实是图集时才按格子采样
     const fb = r.flipbook
     const fbOn = !!fb?.enabled
@@ -809,10 +906,11 @@ export class ParticleSystem {
     A.seed.needsUpdate = true
     A.prog.needsUpdate = true
     this.geo.instanceCount = n
+    if (this.inst && this.inst.visible) this.flushInst(n, col, siz)
   }
 
   update(dt: number) {
-    if (!this.mesh.visible) return
+    if (!this.root.visible) return
     this.mat.uniforms.uTime.value = this.emitElapsed
     const steps = dt > 0.05 ? Math.ceil(dt / 0.05) : 1
     const stepDt = dt / steps
@@ -845,10 +943,17 @@ export class ParticleSystem {
 
   setOpacity(v: number) {
     this.mat.uniforms.uOpacity.value = v
+    this.instMat.opacity = v
+    this.instMat.transparent = this.instMat.blending === THREE.AdditiveBlending || v < 1
   }
 
   dispose() {
     this.geo.dispose()
     this.mat.dispose()
+    if (this.inst) {
+      this.inst.geometry.dispose()
+      this.inst.dispose()
+    }
+    this.instMat.dispose()
   }
 }

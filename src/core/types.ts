@@ -84,9 +84,14 @@ export interface ParticleRenderSettings {
   opacity: number
   fadeIn: number // 生命周期占比
   fadeOut: number
+  /** billboard = 面向相机的贴片；mesh = 实例化实体几何（碎石/方块/晶体） */
+  mode?: 'billboard' | 'mesh'
+  meshGeo?: MeshParticleGeo
   /** 序列帧：贴图按 cols×rows 网格等分，随生命进度播放 */
   flipbook?: FlipbookSettings
 }
+
+export type MeshParticleGeo = 'shard' | 'box' | 'crystal' | 'rock'
 
 export interface FlipbookSettings {
   enabled: boolean

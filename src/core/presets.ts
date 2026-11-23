@@ -2976,7 +2976,16 @@ function buildBurst(): EffectDoc {
     ]),
     brightness: 1.3,
     spin: { angleMin: 0, angleMax: 360, speedMin: -170, speedMax: 170, align: 0, stretch: 0 },
-    render: { textureId: 'tex_shard', blend: 'additive', maxCount: 500, opacity: 0.9, fadeIn: 0.02, fadeOut: 0.35 }
+    render: {
+      textureId: 'tex_shard',
+      blend: 'additive',
+      maxCount: 500,
+      opacity: 0.9,
+      fadeIn: 0.02,
+      fadeOut: 0.35,
+      mode: 'mesh',
+      meshGeo: 'rock'
+    }
   })
   debris.collide = { enabled: true, floor: 0.02, bounce: 0.45, friction: 0.6, kill: false }
 

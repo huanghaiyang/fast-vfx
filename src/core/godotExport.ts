@@ -351,6 +351,14 @@ export async function buildGodotPackage(doc: EffectDoc): Promise<GodotPackage> {
       `「${bouncers.map((o) => o.name).join('、')}」使用地面碰撞反弹：Godot 侧需在粒子着色器或脚本里自行实现碰撞，导出参数只作参考`
     )
   }
+  const meshParts = doc.objects.filter(
+    (o): o is ParticleDoc => o.kind === 'particles' && o.render.mode === 'mesh'
+  )
+  if (meshParts.length) {
+    warnings.push(
+      `「${meshParts.map((o) => o.name).join('、')}」使用实体几何粒子：Godot 侧要改用 GPUParticles3D + Mesh 几何（四面体/十二面体/八面体/方块对应内置图元），billboard 着色器不适用`
+    )
+  }
 
   const glb = await buildGlb(doc, names, new Map())
   if (!glb) warnings.push('模型将以 Godot 内置图元近似（GLB 未生成）')

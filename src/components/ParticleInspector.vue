@@ -182,6 +182,23 @@
     </Section>
 
     <Section title="渲染">
+      <div class="row2">
+        <span class="rl">渲染模式</span>
+        <select :value="p.render.mode || 'billboard'" @change="setMode($event)">
+          <option value="billboard">贴片（面向相机）</option>
+          <option value="mesh">实体几何（碎片/方块）</option>
+        </select>
+      </div>
+      <div class="row2" v-if="p.render.mode === 'mesh'">
+        <span class="rl">几何</span>
+        <select :value="p.render.meshGeo || 'shard'" @change="setMeshGeo($event)">
+          <option value="shard">碎片（四面体）</option>
+          <option value="rock">碎石（十二面体）</option>
+          <option value="crystal">晶体（八面体）</option>
+          <option value="box">方块</option>
+        </select>
+      </div>
+      <div class="hint" v-if="p.render.mode === 'mesh'">实体粒子的颜色来自生命渐变，透明度折进颜色；贴图与序列帧在实体模式下不生效。</div>
       <div class="row2 tex-head">
         <span class="rl">粒子贴图</span>
         <span class="texnow">
@@ -321,8 +338,17 @@ const isFlipTexture = computed(() => {
   return !!t && (t.gen === 'flip' || (t.id || '').startsWith('tex_flip'))
 })
 
-function toggleFlip(e: Event) {
+function setMode(e: Event) {
   edit()
+  props.p.render.mode = (e.target as HTMLSelectElement).value as 'billboard' | 'mesh'
+}
+
+function setMeshGeo(e: Event) {
+  edit()
+  props.p.render.meshGeo = (e.target as HTMLSelectElement).value as any
+}
+
+function toggleFlip(e: Event) {  edit()
   const on = (e.target as HTMLInputElement).checked
   if (!props.p.render.flipbook) {
     props.p.render.flipbook = { enabled: on, cols: 4, rows: 4, holdLast: true, fps: 20 }
