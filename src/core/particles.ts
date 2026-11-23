@@ -11,18 +11,44 @@ attribute float iSize;
 attribute float iRot;
 attribute float iStretch;
 attribute float iSeed;
+attribute float iProg;
 
 uniform float uAlign;
 uniform float uAxis;
+uniform float uFlipV;
+uniform float uFlipCols;
+uniform float uFlipRows;
+uniform float uFlipMode;
+uniform float uFlipFps;
+uniform float uTime;
 
 varying vec4 vColor;
-varying vec2 vUv;
+varying vec2 vTexUv;
+varying vec2 vLocal;
 varying float vSeed;
+varying float vProg;
 
 void main() {
-  vUv = uv;
+  vLocal = uv;
   vColor = iColor;
   vSeed = iSeed;
+  vProg = iProg;
+
+  // 每颗粒子随机镜像 UV；序列帧整图翻转会把格子拼错，必须禁用
+  float mirror = uFlipCols > 0.5 ? 0.0 : 1.0;
+  float sx = mod(floor(iSeed * 7.0), 2.0) * mirror;
+  float sy = mod(floor(iSeed * 13.0), 2.0) * uFlipV * mirror;
+  vec2 muv = vec2(sx > 0.5 ? 1.0 - uv.x : uv.x, sy > 0.5 ? 1.0 - uv.y : uv.y);
+
+  if (uFlipCols > 0.5) {
+    float total = uFlipCols * uFlipRows;
+    float idx = uFlipMode > 0.5 ? mod(floor(uTime * uFlipFps), total) : min(total - 1.0, floor(iProg * total));
+    float cu = mod(idx, uFlipCols);
+    float cv = floor(idx / uFlipCols);
+    vTexUv = vec2((cu + muv.x) / uFlipCols, (cv + muv.y) / uFlipRows);
+  } else {
+    vTexUv = muv;
+  }
 
   vec4 mv = modelViewMatrix * vec4(iPos, 1.0);
 
@@ -63,25 +89,19 @@ uniform float uOpacity;
 uniform float uTime;
 uniform float uHot;
 uniform float uFlicker;
-uniform float uFlipV;
 uniform float uAxis;
 
 varying vec4 vColor;
-varying vec2 vUv;
+varying vec2 vTexUv;
+varying vec2 vLocal;
 varying float vSeed;
+varying float vProg;
 
 void main() {
-  // 每颗粒子随机镜像 UV，消除同一张贴图反复出现的复制感
-  // 有方向的竖贴图（火焰 / 光束）关掉纵向镜像，否则会被上下翻转
-  vec2 uv = vUv;
-  float sx = mod(floor(vSeed * 7.0), 2.0);
-  float sy = mod(floor(vSeed * 13.0), 2.0) * uFlipV;
-  uv = vec2(sx > 0.5 ? 1.0 - uv.x : uv.x, sy > 0.5 ? 1.0 - uv.y : uv.y);
-
-  vec4 t = texture2D(uMap, uv);
+  vec4 t = texture2D(uMap, vTexUv);
 
   // 边缘羽化，去掉贴片方角
-  vec2 p = vUv - 0.5;
+  vec2 p = vLocal - 0.5;
   float r = length(p) * 2.0;
   float feather = 1.0 - smoothstep(0.9, 1.0, r);
 
@@ -90,7 +110,7 @@ void main() {
 
   float a = t.a * vColor.a * uOpacity * feather * flick;
   // 竖向贴图软化根部，防止所有火舌底边对齐后拉出一条亮线
-  if (uAxis > 0.5) a *= smoothstep(0.0, 0.22, vUv.y);
+  if (uAxis > 0.5) a *= smoothstep(0.0, 0.22, vLocal.y);
   if (a <= 0.004) discard;
 
   // 白热核心：只让最密的中心过曝，其余保持彩色
@@ -115,6 +135,7 @@ export class ParticleSystem {
     rot: THREE.InstancedBufferAttribute
     stretch: THREE.InstancedBufferAttribute
     seed: THREE.InstancedBufferAttribute
+    prog: THREE.InstancedBufferAttribute
   }
   private max = 1
   private count = 0
@@ -209,7 +230,11 @@ export class ParticleSystem {
         uHot: { value: 0.45 },
         uFlicker: { value: 0.8 },
         uAxis: { value: 0 },
-        uFlipV: { value: 1 }
+        uFlipV: { value: 1 },
+        uFlipCols: { value: 0 },
+        uFlipRows: { value: 1 },
+        uFlipMode: { value: 0 },
+        uFlipFps: { value: 20 }
       },
       transparent: true,
       depthWrite: false,
@@ -229,7 +254,8 @@ export class ParticleSystem {
       size: this.geo.getAttribute('iSize') as THREE.InstancedBufferAttribute,
       rot: this.geo.getAttribute('iRot') as THREE.InstancedBufferAttribute,
       stretch: this.geo.getAttribute('iStretch') as THREE.InstancedBufferAttribute,
-      seed: this.geo.getAttribute('iSeed') as THREE.InstancedBufferAttribute
+      seed: this.geo.getAttribute('iSeed') as THREE.InstancedBufferAttribute,
+      prog: this.geo.getAttribute('iProg') as THREE.InstancedBufferAttribute
     }
     this.texture = getTexture(this.findTexture(textures))
     this.mat.uniforms.uMap.value = this.texture
@@ -261,6 +287,7 @@ export class ParticleSystem {
     geo.setAttribute('iRot', make(max, 1))
     geo.setAttribute('iStretch', make(max, 1))
     geo.setAttribute('iSeed', make(max, 1))
+    geo.setAttribute('iProg', make(max, 1))
     geo.instanceCount = 0
     return geo
   }
@@ -301,6 +328,7 @@ export class ParticleSystem {
     geo.setAttribute('iRot', make(max, 1))
     geo.setAttribute('iStretch', make(max, 1))
     geo.setAttribute('iSeed', make(max, 1))
+    geo.setAttribute('iProg', make(max, 1))
     geo.instanceCount = 0
     this.geo = geo
     this.mesh.geometry = geo
@@ -311,7 +339,8 @@ export class ParticleSystem {
       size: geo.getAttribute('iSize') as THREE.InstancedBufferAttribute,
       rot: geo.getAttribute('iRot') as THREE.InstancedBufferAttribute,
       stretch: geo.getAttribute('iStretch') as THREE.InstancedBufferAttribute,
-      seed: geo.getAttribute('iSeed') as THREE.InstancedBufferAttribute
+      seed: geo.getAttribute('iSeed') as THREE.InstancedBufferAttribute,
+      prog: geo.getAttribute('iProg') as THREE.InstancedBufferAttribute
     }
     old.dispose()
     this.lutKey = ''
@@ -378,6 +407,13 @@ export class ParticleSystem {
       this.mat.uniforms.uMap.value = tex
     }
     if (r.maxCount !== this.max) this.setMax(r.maxCount)
+    // 序列帧：只有开了 flipbook 且贴图确实是图集时才按格子采样
+    const fb = r.flipbook
+    const fbOn = !!fb?.enabled
+    this.mat.uniforms.uFlipCols.value = fbOn ? Math.max(1, Math.round(fb!.cols)) : 0
+    this.mat.uniforms.uFlipRows.value = fbOn ? Math.max(1, Math.round(fb!.rows)) : 1
+    this.mat.uniforms.uFlipMode.value = fbOn && !fb!.holdLast ? 1 : 0
+    this.mat.uniforms.uFlipFps.value = fbOn ? Math.max(1, fb!.fps) : 20
 
     const key = JSON.stringify([
       this.doc.sizeCurve,
@@ -614,11 +650,15 @@ export class ParticleSystem {
 
     const step = dt
     const sub = this.doc.sub
+    const col = this.doc.collide
+    const floorY = col?.enabled ? col.floor : 0
     for (let i = 0; i < this.count; i++) {
       this.age[i] += step
       const lt0 = this.age[i] / this.life[i]
       let hitGround = false
-      if (sub?.enabled && sub.trigger === 'ground' && this.py[i] < 0) hitGround = true
+      if (sub?.enabled && sub.trigger === 'ground' && this.py[i] < floorY) hitGround = true
+      // 碰撞面「直接消亡」模式：撞线即死，与寿命结束走同一条清理分支
+      if (col?.enabled && col.kill && this.py[i] < floorY) hitGround = true
       if (lt0 >= 1 || hitGround) {
         // 子发射：消亡 / 触地时把位置与（按 inherit 缩放的）速度交给引擎路由
         if (sub?.enabled && (hitGround || sub.trigger === 'death') && this.onSpawn) {
@@ -690,6 +730,17 @@ export class ParticleSystem {
       this.py[i] += this.vy[i] * step * spd
       this.pz[i] += this.vz[i] * step * spd
 
+      // 碰撞反弹：法向按 bounce 反射，切向按 friction 保留，贴地后再滚一小段
+      if (col?.enabled && !col.kill && this.py[i] < col.floor) {
+        this.py[i] = col.floor
+        if (this.vy[i] < 0) this.vy[i] = -this.vy[i] * Math.max(0, Math.min(1, col.bounce))
+        const fr = Math.max(0, Math.min(1, col.friction))
+        this.vx[i] *= fr
+        this.vz[i] *= fr
+        // 反弹速度低于阈值就直接贴地，避免永远微微弹跳
+        if (Math.abs(this.vy[i]) < 0.08) this.vy[i] = 0
+      }
+
       this.angle[i] += this.angVel[i] * spr * step
     }
   }
@@ -705,6 +756,7 @@ export class ParticleSystem {
     const rot = A.rot.array as Float32Array
     const str = A.stretch.array as Float32Array
     const sd = A.seed.array as Float32Array
+    const pg = A.prog.array as Float32Array
 
     const r = this.doc.render
     const curve = this.curveLUT
@@ -741,6 +793,7 @@ export class ParticleSystem {
 
       rot[i] = this.angle[i]
       sd[i] = this.seed[i]
+      pg[i] = lt
       const speed = Math.sqrt(
         this.vx[i] * this.vx[i] + this.vy[i] * this.vy[i] + this.vz[i] * this.vz[i]
       )
@@ -754,6 +807,7 @@ export class ParticleSystem {
     A.rot.needsUpdate = true
     A.stretch.needsUpdate = true
     A.seed.needsUpdate = true
+    A.prog.needsUpdate = true
     this.geo.instanceCount = n
   }
 

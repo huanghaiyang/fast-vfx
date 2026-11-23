@@ -826,6 +826,51 @@ export const GENERATORS: GenDef[] = [
       ctx.restore()
       ctx.shadowBlur = 0
     }
+  },
+  {
+    id: 'flip',
+    name: '序列帧',
+    draw: (ctx, size, p) => {
+      const vi = p.variant ?? 0
+      const N = 4
+      // 变种微调：火花的取向、拖尾厚度、核心亮度
+      const rot = vi ? vr(vi, 1) * Math.PI : 0
+      const arms = vi ? 3 + Math.floor(vr(vi, 2) * 3) : 5
+      const thick = vi ? 0.6 + vr(vi, 3) * 0.8 : 1
+      const coreK = vi ? 0.7 + vr(vi, 4) * 0.8 : 1
+      pixelAlpha(ctx, size, (u, v) => {
+        const cu = Math.floor(u * N)
+        const cv = Math.floor(v * N)
+        // canvas 顶行是第 0 帧，v 从下往上数，所以这里翻一下行号
+        const row = N - 1 - cv
+        const idx = row * N + cu
+        const phase = idx / (N * N - 1)
+        const lu = u * N - cu
+        const lv = v * N - cv
+        const dx = lu - 0.5
+        const dy = lv - 0.5
+        const rad = Math.hypot(dx, dy)
+        const ang = Math.atan2(dy, dx) + rot
+
+        // 扩散火环：半径随时间外推、越来越薄越来越淡
+        const ringR = 0.07 + phase * 0.42
+        const ringW = 0.03 + phase * 0.055
+        const ring = Math.exp(-Math.pow((rad - ringR) / ringW, 2)) * (1 - phase * 0.75)
+
+        // 放射臂：帧内保持同相位，避免逐帧跳变
+        const spikes = Math.pow(Math.abs(Math.cos(ang * arms)), 8 * thick) * Math.max(0, 1 - rad / (0.42 + phase * 0.2))
+        const spikeA = spikes * (0.55 + 0.45 * Math.sin(phase * Math.PI)) * (1 - phase * 0.6)
+
+        // 中心白热核：前 1/3 帧最强，随后迅速熄灭
+        const core = Math.max(0, 1 - phase * 3) * coreK * Math.pow(Math.max(0, 1 - rad / (0.18 + phase * 0.18)), 2.2)
+
+        // 一点噪声让环边缘不规整
+        const n = fbm(lu * 8 + p.seed, lv * 8 + idx * 0.7, p.seed + 31, 3)
+        const grain = 0.75 + n * 0.35
+
+        return Math.min(1, (ring * 0.95 + spikeA * 0.75 + core * 1.25) * grain)
+      })
+    }
   }
 ]
 
@@ -874,7 +919,7 @@ export function getTexture(
     texture = loader.load(asset.dataUrl)
   } else {
     // 火焰贴图细节多，单独用更高分辨率，避免叠大后糊成一块
-    const res = asset.gen === 'flame' ? 1024 : 512
+    const res = asset.gen === 'flame' || asset.gen === 'flip' ? 1024 : 512
     texture = new THREE.CanvasTexture(getCanvas(asset.gen, asset.params, res))
   }
   texture.colorSpace = THREE.SRGBColorSpace

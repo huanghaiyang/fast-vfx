@@ -84,6 +84,29 @@ export interface ParticleRenderSettings {
   opacity: number
   fadeIn: number // 生命周期占比
   fadeOut: number
+  /** 序列帧：贴图按 cols×rows 网格等分，随生命进度播放 */
+  flipbook?: FlipbookSettings
+}
+
+export interface FlipbookSettings {
+  enabled: boolean
+  cols: number
+  rows: number
+  /** 播完后保持末帧（true）还是按每帧保持时间循环（false 时按 fps 循环） */
+  holdLast: boolean
+  fps: number // holdLast=false 时的播放速度
+}
+
+export interface CollisionSettings {
+  enabled: boolean
+  /** 碰撞面高度（世界 y） */
+  floor: number
+  /** 法向速度反弹系数 0..1 */
+  bounce: number
+  /** 切向速度保留（1 = 无摩擦） */
+  friction: number
+  /** 撞地直接消亡，而不是反弹 */
+  kill: boolean
 }
 
 export interface ParticleDoc {
@@ -108,6 +131,7 @@ export interface ParticleDoc {
   brightness: number
   spin: SpinSettings
   render: ParticleRenderSettings
+  collide: CollisionSettings
   sub: SubEmitSettings
 }
 

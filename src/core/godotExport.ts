@@ -335,6 +335,22 @@ export async function buildGodotPackage(doc: EffectDoc): Promise<GodotPackage> {
       `「${subs.map((o) => o.name).join('、')}」配置了子发射，Godot 运行时脚本暂不支持跨发射器注入，需用 GPUParticles3D + sub_emitter 自行接`
     )
   }
+  const flips = doc.objects.filter(
+    (o): o is ParticleDoc => o.kind === 'particles' && !!o.render.flipbook?.enabled
+  )
+  if (flips.length) {
+    warnings.push(
+      `「${flips.map((o) => o.name).join('、')}」使用序列帧贴图：导出只带整张图集，Godot 侧需用 ShaderMaterial + 图集 UV 偏移自行按生命播放，或另拆帧序列`
+    )
+  }
+  const bouncers = doc.objects.filter(
+    (o): o is ParticleDoc => o.kind === 'particles' && !!o.collide?.enabled
+  )
+  if (bouncers.length) {
+    warnings.push(
+      `「${bouncers.map((o) => o.name).join('、')}」使用地面碰撞反弹：Godot 侧需在粒子着色器或脚本里自行实现碰撞，导出参数只作参考`
+    )
+  }
 
   const glb = await buildGlb(doc, names, new Map())
   if (!glb) warnings.push('模型将以 Godot 内置图元近似（GLB 未生成）')

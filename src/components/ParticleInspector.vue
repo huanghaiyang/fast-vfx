@@ -111,6 +111,21 @@
       <SliderRow label="漩涡" :model-value="p.motion.swirl" :min="-6" :max="6" :step="0.02" @begin="edit" @update:model-value="p.motion.swirl = $event" />
     </Section>
 
+    <Section title="碰撞">
+      <label class="chk">
+        <input type="checkbox" v-model="p.collide.enabled" @change="edit" />
+        <span>与地面碰撞（世界 y = 高度）</span>
+      </label>
+      <SliderRow label="地面高度" :model-value="p.collide.floor" :min="-2" :max="3" :step="0.01" @begin="edit" @update:model-value="p.collide.floor = $event" />
+      <SliderRow label="反弹" :model-value="p.collide.bounce" :min="0" :max="1" :step="0.01" @begin="edit" @update:model-value="p.collide.bounce = $event" />
+      <SliderRow label="摩擦保留" :model-value="p.collide.friction" :min="0" :max="1" :step="0.01" @begin="edit" @update:model-value="p.collide.friction = $event" />
+      <label class="chk" style="margin-top: 4px">
+        <input type="checkbox" v-model="p.collide.kill" @change="edit" />
+        <span>撞地直接消失（不反弹）</span>
+      </label>
+      <div class="hint">反弹速度低于 0.08 m/s 会直接贴地；撞击点也会触发子发射的「触地」条件。</div>
+    </Section>
+
     <Section title="尺寸与颜色">
       <SliderRow
         label="尺寸"
@@ -192,6 +207,34 @@
       <SliderRow label="不透明度" :model-value="p.render.opacity" :min="0" :max="1" :step="0.01" @begin="edit" @update:model-value="p.render.opacity = $event" />
       <SliderRow label="淡入" :model-value="p.render.fadeIn" :min="0" :max="0.6" :step="0.005" :digits="3" @begin="edit" @update:model-value="p.render.fadeIn = $event" />
       <SliderRow label="淡出" :model-value="p.render.fadeOut" :min="0" :max="1" :step="0.005" :digits="3" @begin="edit" @update:model-value="p.render.fadeOut = $event" />
+      <label class="chk" style="margin-top: 8px">
+        <input type="checkbox" :checked="!!p.render.flipbook?.enabled" @change="toggleFlip($event)" />
+        <span>序列帧贴图（贴图按 cols×rows 等分成动画帧）</span>
+      </label>
+      <div class="row2" v-if="p.render.flipbook?.enabled">
+        <span class="rl">帧格</span>
+        <div class="inline">
+          <NumberField :model-value="p.render.flipbook.cols" :min="1" :max="16" :step="1" :digits="0" @begin="edit" @update:model-value="p.render.flipbook!.cols = Math.round($event)" />
+          <span class="tilde">×</span>
+          <NumberField :model-value="p.render.flipbook.rows" :min="1" :max="16" :step="1" :digits="0" @begin="edit" @update:model-value="p.render.flipbook!.rows = Math.round($event)" />
+        </div>
+      </div>
+      <label class="chk" v-if="p.render.flipbook?.enabled">
+        <input type="checkbox" v-model="p.render.flipbook.holdLast" @change="edit" />
+        <span>随生命进度播放并停在末帧（关掉则按 fps 循环）</span>
+      </label>
+      <SliderRow
+        v-if="p.render.flipbook?.enabled && !p.render.flipbook.holdLast"
+        label="播放 fps"
+        :model-value="p.render.flipbook.fps"
+        :min="1"
+        :max="60"
+        :step="1"
+        :digits="0"
+        @begin="edit"
+        @update:model-value="p.render.flipbook!.fps = Math.round($event)"
+      />
+      <div class="hint" v-if="!isFlipTexture">当前贴图「{{ texName }}」不是图集，开序列帧会看到被切碎的单帧；建议先选「序列帧」类贴图。</div>
     </Section>
 
     <Section title="子发射">
@@ -272,6 +315,23 @@ const texThumb = computed(() => {
 const otherParticles = computed(() =>
   S.doc.objects.filter((o): o is ParticleDoc => o.kind === 'particles' && o.id !== props.p.id)
 )
+
+const isFlipTexture = computed(() => {
+  const t = S.doc.textures.find((x) => x.id === props.p.render.textureId)
+  return !!t && (t.gen === 'flip' || (t.id || '').startsWith('tex_flip'))
+})
+
+function toggleFlip(e: Event) {
+  edit()
+  const on = (e.target as HTMLInputElement).checked
+  if (!props.p.render.flipbook) {
+    props.p.render.flipbook = { enabled: on, cols: 4, rows: 4, holdLast: true, fps: 20 }
+  } else {
+    props.p.render.flipbook.enabled = on
+  }
+  // 打开时如果当前不是图集，自动切到序列帧贴图，避免用户看到被切碎的画面
+  if (on && !isFlipTexture.value) props.p.render.textureId = 'tex_flip'
+}
 </script>
 
 <style scoped>

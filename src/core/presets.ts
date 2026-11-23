@@ -423,7 +423,7 @@ function buildMagic(): EffectDoc {
       [0.4, '#66b8ff'],
       [1, '#3c2bff']
     ]),
-    brightness: 2.4,
+    brightness: 1.7,
     spin: { angleMin: 0, angleMax: 360, speedMin: -60, speedMax: 60, align: 0, stretch: 0 },
     render: { textureId: 'tex_star', blend: 'additive', maxCount: 1600, opacity: 1, fadeIn: 0.2, fadeOut: 0.4 }
   })
@@ -2905,6 +2905,93 @@ function buildSubEmit(): EffectDoc {
   return doc
 }
 
+function buildBurst(): EffectDoc {
+  const doc = emptyDoc('冲击爆点')
+  doc.duration = 2.2
+  doc.bloomStrength = 0.6
+  doc.camera = { position: [0, 2.15, 6.2], target: [0, 1.0, 0], fov: 46 }
+
+  // 序列帧爆闪：4×4 图集，按生命进度播放并停在末帧
+  const flash = createParticle({
+    name: '序列帧爆闪',
+    transform: { position: [0, 1.02, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+    emission: { rate: 0, burst: true, burstCount: 3, burstInterval: 0, shape: 'sphere', radius: 0.08, lifetimeMin: 0.55, lifetimeMax: 0.55, duration: 0.05 },
+    motion: {
+      speedMin: 0,
+      speedMax: 0.15,
+      direction: [0, 1, 0],
+      spread: 8,
+      gravity: [0, 0, 0],
+      damping: 2,
+      turbulence: 0,
+      turbulenceScale: 1
+    },
+    sizeBase: 0.92,
+    sizeCurve: c([
+      [0, 1],
+      [1, 1.04]
+    ]),
+    gradient: grad([
+      [0, '#fff8e0'],
+      [0.4, '#ffb44a'],
+      [1, '#ff4400']
+    ]),
+    brightness: 1.45,
+    spin: { angleMin: 0, angleMax: 360, speedMin: 0, speedMax: 0, align: 0, stretch: 0 },
+    render: {
+      textureId: 'tex_flip',
+      blend: 'additive',
+      maxCount: 160,
+      opacity: 0.8,
+      fadeIn: 0.02,
+      fadeOut: 0.1,
+      flipbook: { enabled: true, cols: 4, rows: 4, holdLast: true, fps: 20 }
+    }
+  })
+
+  // 碎石：带地面反弹，落点会小跳几下再停住
+  const debris = createParticle({
+    name: '碎石飞溅',
+    transform: { position: [0, 1.02, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+    emission: { rate: 0, burst: true, burstCount: 74, burstInterval: 0, shape: 'sphere', radius: 0.12, lifetimeMin: 1.1, lifetimeMax: 1.7, duration: 0.05 },
+    motion: {
+      speedMin: 1.2,
+      speedMax: 4.6,
+      direction: [0, 1, 0],
+      spread: 78,
+      gravity: [0, -3.6, 0],
+      damping: 0.5,
+      turbulence: 0.45,
+      turbulenceScale: 2.4
+    },
+    sizeBase: 0.15,
+    sizeCurve: c([
+      [0, 1],
+      [1, 0.65]
+    ]),
+    gradient: grad([
+      [0, '#ffd9a0'],
+      [0.6, '#c96a2a'],
+      [1, '#3d1404']
+    ]),
+    brightness: 1.3,
+    spin: { angleMin: 0, angleMax: 360, speedMin: -170, speedMax: 170, align: 0, stretch: 0 },
+    render: { textureId: 'tex_shard', blend: 'additive', maxCount: 500, opacity: 0.9, fadeIn: 0.02, fadeOut: 0.35 }
+  })
+  debris.collide = { enabled: true, floor: 0.02, bounce: 0.45, friction: 0.6, kill: false }
+
+  const ground = glowDisc('地面暖光', 1.75, 0.1, '#ff8a3a', '#ff3b00', 0.03)
+  doc.objects = [flash, debris, ground]
+  doc.tracks = [
+    track(ground.id, 'opacity', [
+      [0, 0.9],
+      [0.25, 0.55],
+      [1.2, 0.06]
+    ])
+  ]
+  return doc
+}
+
 export const PRESETS: Preset[] = [
   { id: 'fire', name: '烈焰', desc: '锥形火焰 + 火星，循环燃烧', tag: '火焰', accent: '#ff7a1a', build: buildFire },
   { id: 'jet', name: '烈焰喷射', desc: '定向火舌 + 尾焰烟，持续喷射', tag: '火焰', accent: '#ffa53a', build: buildJet },
@@ -2928,5 +3015,6 @@ export const PRESETS: Preset[] = [
   { id: 'shadow', name: '暗影侵蚀', desc: '缠绕核心 + 黑雾 + 暗影碎片', tag: '法术', accent: '#a06bff', build: buildShadow },
   { id: 'portal', name: '虚空裂隙', desc: '旋转裂隙 + 虚空核 + 螺旋微粒', tag: '法术', accent: '#c86bff', build: buildPortal },
   { id: 'heal', name: '治疗光环', desc: '上升光点 + 叶影，绿色循环', tag: '法术', accent: '#41ff9e', build: buildHeal },
-  { id: 'subemit', name: '子发射演示', desc: '触地溅射 + 寿命碎裂，验证子发射与生命曲线', tag: '演示', accent: '#ff9a3c', build: buildSubEmit }
+  { id: 'subemit', name: '子发射演示', desc: '触地溅射 + 寿命碎裂，验证子发射与生命曲线', tag: '演示', accent: '#ff9a3c', build: buildSubEmit },
+  { id: 'burst', name: '冲击爆点', desc: '序列帧爆闪 + 带地面反弹的碎石飞溅', tag: '演示', accent: '#ffb545', build: buildBurst }
 ]

@@ -106,8 +106,10 @@ export function createParticle(overrides: DeepPartial<ParticleDoc> = {}): Partic
       maxCount: 2000,
       opacity: 1,
       fadeIn: 0.12,
-      fadeOut: 0.35
+      fadeOut: 0.35,
+      flipbook: { enabled: false, cols: 4, rows: 4, holdLast: true, fps: 20 }
     },
+    collide: { enabled: false, floor: 0, bounce: 0.35, friction: 0.7, kill: false },
     sub: { enabled: false, targetId: '', trigger: 'death', count: 6, inherit: 0.4, spread: 55 }
   }
   return merge(doc, overrides) as ParticleDoc
@@ -195,7 +197,8 @@ export const BASE_TEXTURES: TextureAsset[] = [
   tex('tex_dust', '尘粒', 'dust', { seed: 21 }),
   tex('tex_slash', '刀光', 'slash'),
   tex('tex_cell', '能量网', 'cell', { seed: 19 }),
-  tex('tex_rune', '符印', 'rune', { seed: 23 })
+  tex('tex_rune', '符印', 'rune', { seed: 23 }),
+  tex('tex_flip', '序列帧', 'flip', { seed: 29 })
 ]
 
 export function emptyDoc(name = '新特效'): EffectDoc {
@@ -226,6 +229,8 @@ export function normalizeDoc(doc: EffectDoc): EffectDoc {
     if (o.kind !== 'particles') continue
     if (!o.speedCurve) o.speedCurve = { points: [{ t: 0, v: 1 }, { t: 1, v: 1 }] }
     if (!o.spinCurve) o.spinCurve = { points: [{ t: 0, v: 1 }, { t: 1, v: 1 }] }
+    if (!o.collide) o.collide = { enabled: false, floor: 0, bounce: 0.35, friction: 0.7, kill: false }
+    if (!o.render.flipbook) o.render.flipbook = { enabled: false, cols: 4, rows: 4, holdLast: true, fps: 20 }
     if (!o.sub) o.sub = { enabled: false, targetId: '', trigger: 'death', count: 6, inherit: 0.4, spread: 55 }
   }
   return doc

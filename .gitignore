@@ -34,3 +34,5 @@ export-tmp/
 .dev-server.log
 tmp-capture-*/
 .build.log
+.tsc2.log
+.tsc.log
