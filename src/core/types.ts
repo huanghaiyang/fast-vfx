@@ -110,6 +110,7 @@ export type GeoKind =
   | 'arc'
   | 'crystal'
   | 'rock'
+  | 'imported' // 上传的 GLB/GLTF 资产
 
 export interface GeoParams {
   size: number
@@ -148,6 +149,19 @@ export interface ModelDoc {
   geometry: GeoKind
   params: GeoParams
   material: ModelMaterial
+  assetId?: string // geometry === 'imported' 时引用 doc.modelAssets
+}
+
+/** 上传的 GLB/GLTF 模型资产（分类后可复用） */
+export interface ModelAsset {
+  id: string
+  name: string
+  category: string
+  sizeKB: number
+  tris?: number
+  file?: string // data/models 下的文件名
+  url?: string // /data/models/<file>，项目内落盘的正式来源
+  dataUrl?: string // 临时/兜底：base64，只在没有落盘能力时用，IndexedDB 暂存
 }
 
 export type FXObject = ParticleDoc | ModelDoc
@@ -188,6 +202,7 @@ export interface EffectDoc {
   objects: FXObject[]
   tracks: Track[]
   textures: TextureAsset[]
+  modelAssets?: ModelAsset[]
 }
 
 let seq = 0

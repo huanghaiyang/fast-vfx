@@ -39,6 +39,32 @@
           <b>建模流程</b>
           <div class="hint">添加模型 → 右侧调尺寸 / 细分 / 形变 / 材质 → 时间轴打关键帧 → 导出 Godot。</div>
         </div>
+
+        <div class="pgroup">
+          <em>上传模型</em>
+          <i>{{ assets.length }}</i>
+          <span class="pline"></span>
+        </div>
+        <button class="blank" @click="glbInput?.click()">＋ 上传 GLB / GLTF（存到 data/models）</button>
+        <input ref="glbInput" type="file" accept=".glb,.gltf" multiple hidden @change="onGlbUpload" />
+        <div v-if="!assets.length" class="vhint2">暂无上传模型；文件会写进项目目录 data/models，可被 git 管理。</div>
+        <template v-for="g in assetGroups" :key="g.category">
+          <div class="pgroup cat">
+            <em>{{ g.category }}</em>
+            <i>{{ g.items.length }}</i>
+            <span class="pline"></span>
+          </div>
+          <div class="asset" v-for="a in g.items" :key="a.id">
+            <button class="aMain" @click="useAsset(a)" :title="'添加实例：' + a.name">
+              <span class="aName">{{ a.name }}</span>
+              <span class="aMeta">{{ a.sizeKB }} KB{{ a.tris ? ' · ' + a.tris + ' tri' : '' }}{{ a.url ? '' : ' · 仅临时' }}</span>
+            </button>
+            <select :value="a.category" @change="changeCat(a.id, ($event.target as HTMLSelectElement).value)">
+              <option v-for="c in MODEL_CATEGORIES" :key="c" :value="c">{{ c }}</option>
+            </select>
+            <button class="aDel" @click="dropAsset(a.id)" title="从库中移除">×</button>
+          </div>
+        </template>
       </div>
 
       <div v-else class="pad">
@@ -80,15 +106,30 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { S, A, addTexture, selectTexture, toast, pushHistory } from '../core/store'
+import { computed, onMounted, ref } from 'vue'
+import {
+  S,
+  A,
+  MODEL_CATEGORIES,
+  addImportedModel,
+  addModelAsset,
+  addTexture,
+  guessCategory,
+  refreshModelLibrary,
+  removeModelAsset,
+  selectTexture,
+  setModelCategory,
+  toast,
+  pushHistory
+} from '../core/store'
 import { PRESETS } from '../core/presets'
 import { GEO_LIST } from '../core/geometry'
 import { BASE_TEXTURES, texVariant } from '../core/doc'
 import { GEO_ICONS } from './icons'
 import { canvasToDataURL, VARIANT_COUNT } from '../core/textures'
+import { countTriangles, parseModel, saveServerModel } from '../core/assets'
 import type { Preset } from '../core/presets'
-import type { TextureAsset } from '../core/types'
+import type { ModelAsset, TextureAsset } from '../core/types'
 
 const groups = computed(() => {
   const out: Array<{ tag: string; items: Preset[] }> = []
@@ -117,7 +158,105 @@ const curTexId = computed(() => {
 })
 
 const fileInput = ref<HTMLInputElement>()
+const glbInput = ref<HTMLInputElement>()
 const thumbCache = new Map<string, string>()
+
+/* -------------------------------- 模型库 -------------------------------- */
+const assets = computed<ModelAsset[]>(() => S.doc.modelAssets || [])
+
+const assetGroups = computed(() => {
+  const order = [...MODEL_CATEGORIES] as string[]
+  const out: Array<{ category: string; items: ModelAsset[] }> = []
+  for (const a of assets.value) {
+    let g = out.find((x) => x.category === a.category)
+    if (!g) {
+      g = { category: a.category, items: [] }
+      out.push(g)
+    }
+    g.items.push(a)
+  }
+  return out.sort((a, b) => {
+    const ai = order.indexOf(a.category)
+    const bi = order.indexOf(b.category)
+    return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi)
+  })
+})
+
+function useAsset(a: ModelAsset) {
+  addImportedModel(a.id)
+}
+
+function changeCat(id: string, category: string) {
+  setModelCategory(id, category)
+}
+
+function dropAsset(id: string) {
+  removeModelAsset(id)
+}
+
+async function onGlbUpload(e: Event) {
+  const input = e.target as HTMLInputElement
+  const files = Array.from(input.files || [])
+  input.value = ''
+  for (const file of files) {
+    if (file.size > 60 * 1024 * 1024) {
+      toast(`「${file.name}」超过 60MB，已跳过`, 'warn')
+      continue
+    }
+    const buf = await file.arrayBuffer()
+    const name = file.name.replace(/\.(glb|gltf)$/i, '')
+    // 首选：写进项目 data/models
+    const saved = await saveServerModel(name, buf)
+    let asset: ModelAsset
+    if (saved) {
+      asset = {
+        id: 'fa_' + saved.file.replace(/[^\w\u4e00-\u9fa5]/g, '_'),
+        name,
+        category: guessCategory(file.name),
+        sizeKB: saved.sizeKB,
+        file: saved.file,
+        url: saved.url
+      }
+    } else {
+      // 兜底：没有落盘能力时退回 base64 + IndexedDB 临时存储
+      const dataUrl = await toDataUrl(buf)
+      asset = {
+        id: 'fa_' + Math.random().toString(36).slice(2, 8),
+        name,
+        category: guessCategory(file.name),
+        sizeKB: Math.round(file.size / 1024),
+        dataUrl
+      }
+      toast('开发服务器未启用落盘，先用临时存储', 'warn')
+    }
+    addModelAsset(asset)
+    // 解析一次拿三角面数，顺便验证文件可用
+    try {
+      const g = await parseModel(asset.url || asset.dataUrl || '')
+      const rec = (S.doc.modelAssets || []).find((x) => x.id === asset.id)
+      if (rec) {
+        rec.tris = countTriangles(g)
+        S.version++
+      }
+    } catch {
+      toast(`「${file.name}」解析失败，可能不是有效的 GLB`, 'warn')
+    }
+    toast(`已导入「${name}」`, 'ok')
+  }
+}
+
+function toDataUrl(buf: ArrayBuffer): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.readAsDataURL(new Blob([buf], { type: 'model/gltf-binary' }))
+  })
+}
+
+onMounted(async () => {
+  const added = await refreshModelLibrary()
+  if (added) toast(`data/models 里发现 ${added} 个模型`, 'info')
+})
 
 function thumb(t: TextureAsset, size = 96): string {
   if (t.dataUrl) return t.dataUrl

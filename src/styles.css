@@ -615,6 +615,69 @@ input[type='range']::-moz-range-thumb {
   box-shadow: 0 0 0 1px var(--accent) inset;
 }
 
+/* 上传模型库 */
+.pgroup.cat {
+  margin-top: 10px;
+  margin-bottom: 4px;
+}
+.pgroup.cat em {
+  color: #c9a06a;
+}
+.asset {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+  margin-bottom: 3px;
+}
+.asset .aMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 4px 7px;
+  background: #0a0c12;
+  border-radius: 5px;
+  text-align: left;
+}
+.asset .aMain:hover {
+  border-color: var(--accent);
+}
+.asset .aName {
+  font-size: 11px;
+  color: #dfe4f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.asset .aMeta {
+  font-size: 9px;
+  color: var(--dim);
+}
+.asset select {
+  width: 62px;
+  font-size: 10px;
+  padding: 0 2px;
+}
+.asset .aDel {
+  width: 22px;
+  font-size: 12px;
+  color: var(--dim);
+  border-radius: 5px;
+}
+.asset .aDel:hover {
+  color: #ff7a6a;
+  border-color: #ff7a6a;
+}
+.vhint2 {
+  font-size: 10px;
+  color: var(--dim);
+  line-height: 1.5;
+  padding: 4px 0 2px;
+}
+
 /* 模型变种选择 */
 .vchips {
   display: flex;

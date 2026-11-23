@@ -3,6 +3,7 @@ import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js'
 import JSZip from 'jszip'
 import type { EffectDoc, ModelDoc, ParticleDoc, TextureAsset, TrackProperty } from './types'
 import { getCanvas, getTexture } from './textures'
+import { instantiateModel } from './assets'
 import { DOUBLE_SIDED_KINDS, godotPrimitive, buildGeometry } from './geometry'
 import { gradientSamples } from './curve'
 import { GODOT_RUNTIME_GD } from './godotRuntime'
@@ -143,6 +144,27 @@ async function buildGlb(doc: EffectDoc, names: string[], texPaths: Map<string, s
 
   for (const m of models) {
     const idx = doc.objects.indexOf(m)
+    if (m.geometry === 'imported') {
+      // 上传模型：把 data/models 里的 GLB 解析后并入 models.glb，Godot 侧按节点名取用
+      const asset = (doc.modelAssets || []).find((a) => a.id === m.assetId)
+      const ref = asset?.url || asset?.dataUrl
+      if (!ref) {
+        console.warn('[FastVFX] 导入模型缺少二进制，已跳过', m.name)
+        continue
+      }
+      try {
+        const src = await instantiateModel(ref)
+        const node = src.clone(true)
+        node.name = names[idx]
+        node.traverse((o) => {
+          o.userData.fxIndex = idx
+        })
+        group.add(node)
+      } catch (err) {
+        console.warn('[FastVFX] 导入模型导出失败', m.name, err)
+      }
+      continue
+    }
     const geo = buildGeometry(m.geometry, m.params)
     const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial())
     mesh.name = names[idx]

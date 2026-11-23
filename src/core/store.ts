@@ -1,9 +1,11 @@
 import { reactive, watch } from 'vue'
 import type { EffectDoc, FXObject, TrackProperty, Vec3 } from './types'
-import { BASE_TEXTURES, cloneDoc, createModel, createParticle, emptyDoc, mergeTrack } from './doc'
+import { BASE_TEXTURES, cloneDoc, createImportedModel, createModel, createParticle, emptyDoc, mergeTrack } from './doc'
 import { PRESETS } from './presets'
 import type { FXEngine, GizmoMode } from './engine'
-import type { GeoKind } from './types'
+import type { GeoKind, ModelAsset } from './types'
+import { deleteModelData, getModelData, putModelData } from './assetStore'
+import { deleteServerModel, listServerModels } from './assets'
 
 export const S = reactive({
   doc: PRESETS[0].build() as EffectDoc,
@@ -271,6 +273,118 @@ export function addTexture(asset: EffectDoc['textures'][number]) {
   S.version++
 }
 
+/* ------------------------------ 上传模型资产 ------------------------------ */
+export const MODEL_CATEGORIES = ['岩石', '植被', '建筑', '道具', '角色', '特效件', '其他'] as const
+
+/** 按文件名猜分类，猜不中归到「其他」，用户可随时改 */
+export function guessCategory(name: string): string {
+  const n = name.toLowerCase()
+  const rules: Array<[string, string[]]> = [
+    ['岩石', ['rock', 'stone', 'boulder', 'cliff', 'crag', '碎石', '岩']],
+    ['植被', ['tree', 'plant', 'grass', 'bush', 'leaf', 'flower', '植被', '树', '草', '花']],
+    ['建筑', ['building', 'house', 'wall', 'tower', 'pillar', 'column', 'gate', '建筑', '楼', '塔', '墙', '柱']],
+    ['道具', ['sword', 'weapon', 'box', 'crate', 'barrel', 'chest', 'item', 'prop', '剑', '箱', '桶', '道具']],
+    ['角色', ['character', 'char', 'hero', 'monster', 'creature', 'zombie', 'beast', '角色', '怪', '人']],
+    ['特效件', ['fx', 'vfx', 'effect', 'magic', 'crystal', 'shard', 'orb', '特效', '晶']]
+  ]
+  for (const [cat, keys] of rules) if (keys.some((k) => n.includes(k))) return cat
+  return '其他'
+}
+
+export function addModelAsset(asset: ModelAsset) {
+  pushHistory()
+  if (!S.doc.modelAssets) S.doc.modelAssets = []
+  S.doc.modelAssets.push(asset)
+  if (asset.dataUrl) void putModelData(asset.id, asset.dataUrl)
+  S.version++
+}
+
+export function setModelCategory(assetId: string, category: string) {
+  const a = (S.doc.modelAssets || []).find((x) => x.id === assetId)
+  if (!a) return
+  pushHistory()
+  a.category = category
+  S.version++
+}
+
+export function addImportedModel(assetId: string) {
+  const asset = (S.doc.modelAssets || []).find((a) => a.id === assetId)
+  if (!asset) return toast('模型资产不存在', 'warn')
+  pushHistory()
+  const m = createImportedModel(asset)
+  S.doc.objects.push(m)
+  S.selectedId = m.id
+  S.version++
+  engineRef?.sync()
+  toast(`已添加「${asset.name}」`, 'ok')
+}
+
+export function removeModelAsset(assetId: string) {
+  const used = S.doc.objects.some((o) => o.kind === 'model' && o.assetId === assetId)
+  if (used) {
+    toast('该模型仍有实例在场景里，先删除实例', 'warn')
+    return
+  }
+  const asset = (S.doc.modelAssets || []).find((a) => a.id === assetId)
+  pushHistory()
+  S.doc.modelAssets = (S.doc.modelAssets || []).filter((a) => a.id !== assetId)
+  if (asset?.file) void deleteServerModel(asset.file)
+  void deleteModelData(assetId)
+  S.version++
+}
+
+/** 扫描项目 data/models，把还没入册的 glb 补进模型库（也会读到用户手工放进目录的文件） */
+export async function refreshModelLibrary(): Promise<number> {
+  const files = await listServerModels()
+  if (!files.length) return 0
+  if (!S.doc.modelAssets) S.doc.modelAssets = []
+  let added = 0
+  for (const f of files) {
+    const exist = S.doc.modelAssets.find((a) => a.file === f.file || a.url === f.url)
+    if (exist) {
+      if (exist.sizeKB !== f.sizeKB || exist.file !== f.file) {
+        exist.file = f.file
+        exist.url = f.url
+        exist.sizeKB = f.sizeKB
+      }
+      continue
+    }
+    S.doc.modelAssets.push({
+      id: 'fa_' + f.file.replace(/[^\w\u4e00-\u9fa5]/g, '_'),
+      name: f.file.replace(/\.(glb|gltf)$/i, ''),
+      category: guessCategory(f.file),
+      sizeKB: f.sizeKB,
+      file: f.file,
+      url: f.url
+    })
+    added++
+  }
+  if (added) S.version++
+  return added
+}
+
+/** 没有落盘的旧数据：从 IndexedDB 补回临时二进制 */
+export async function hydrateModelAssets() {
+  const list = S.doc.modelAssets || []
+  let changed = false
+  for (const a of list) {
+    if (a.url) continue
+    if (a.dataUrl) {
+      void putModelData(a.id, a.dataUrl)
+      continue
+    }
+    const data = await getModelData(a.id)
+    if (data) {
+      a.dataUrl = data
+      changed = true
+    }
+  }
+  if (changed) {
+    S.version++
+    engineRef?.sync()
+  }
+}
+
 export function selectTexture(id: string) {
   const obj = A.selected
   if (!obj) return toast('先选中一个对象', 'warn')
@@ -311,11 +425,13 @@ export async function importProject(file: File) {
     if (!Array.isArray(doc.objects)) throw new Error('格式不正确')
     pushHistory()
     doc.textures = mergeTextures(doc)
+    if (!doc.modelAssets) doc.modelAssets = []
     S.doc = doc
     S.selectedId = null
     S.time = 0
     S.version++
     engineRef?.sync()
+    void hydrateModelAssets()
     toast('项目已载入', 'ok')
   } catch (err) {
     toast('文件解析失败：' + (err as Error).message, 'warn')
@@ -331,7 +447,10 @@ watch(
     window.clearTimeout(autosaveTimer)
     autosaveTimer = window.setTimeout(() => {
       try {
-        localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(S.doc))
+        // 模型二进制不入 localStorage：落盘在 data/models，或临时存 IndexedDB
+        const plain = JSON.parse(JSON.stringify(S.doc)) as EffectDoc
+        if (plain.modelAssets) plain.modelAssets = plain.modelAssets.map((a) => ({ ...a, dataUrl: undefined }))
+        localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(plain))
       } catch {
         /* 忽略配额错误 */
       }
@@ -347,9 +466,11 @@ export function restoreAutosave() {
     const doc = JSON.parse(raw) as EffectDoc
     if (!Array.isArray(doc.objects) || !doc.objects.length) return false
     doc.textures = mergeTextures(doc)
+    if (!doc.modelAssets) doc.modelAssets = []
     S.doc = doc
     S.time = 0
     S.version++
+    void hydrateModelAssets()
     return true
   } catch {
     return false

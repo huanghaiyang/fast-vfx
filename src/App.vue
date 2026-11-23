@@ -20,7 +20,7 @@ import Viewport from './components/Viewport.vue'
 import Inspector from './components/Inspector.vue'
 import TimelinePanel from './components/TimelinePanel.vue'
 import HelpModal from './components/HelpModal.vue'
-import { S, A, undo, redo, saveProject, restoreAutosave, toast } from './core/store'
+import { S, A, addImportedModel, undo, redo, saveProject, restoreAutosave, refreshModelLibrary, toast } from './core/store'
 import { texVariant } from './core/doc'
 import { VARIANT_COUNT } from './core/textures'
 
@@ -104,6 +104,15 @@ onMounted(() => {
   if (varN >= 0 && varN <= 8) {
     for (const o of S.doc.objects) if (o.kind === 'model') o.params.variant = varN
     S.version++
+  }
+  // 调试：?asset=文件名 直接往场景里加一个上传模型实例
+  const assetQ = q.get('asset')
+  if (assetQ) {
+    void (async () => {
+      await refreshModelLibrary()
+      const a = (S.doc.modelAssets || []).find((x) => x.file === assetQ || x.name === assetQ || x.id === assetQ)
+      if (a) addImportedModel(a.id)
+    })()
   }
 })
 

@@ -1,37 +1,52 @@
 <template>
   <div>
     <Section title="几何体">
-      <div class="row2">
+      <div class="row2" v-if="m.geometry === 'imported'">
+        <span class="rl">资产</span>
+        <div class="assetInfo">
+          <span class="aName">{{ assetName }}</span>
+          <span class="aMeta">{{ assetSize }}{{ assetTris ? ' · ' + assetTris + ' tri' : '' }}{{ asset?.url ? '' : ' · 临时' }}</span>
+        </div>
+      </div>
+      <div class="row2" v-if="m.geometry === 'imported'">
+        <span class="rl">分类</span>
+        <select :value="asset?.category || ''" @change="changeCategory(($event.target as HTMLSelectElement).value)">
+          <option v-for="c in MODEL_CATEGORIES" :key="c" :value="c">{{ c }}</option>
+        </select>
+      </div>
+      <div class="row2" v-if="m.geometry !== 'imported'">
         <span class="rl">类型</span>
         <select :value="m.geometry" @change="changeKind(($event.target as HTMLSelectElement).value)">
           <option v-for="g in GEO_LIST" :key="g.kind" :value="g.kind">{{ g.label }} · {{ g.hint }}</option>
         </select>
       </div>
-      <SliderRow v-if="hasSize" :label="sizeLabel" :model-value="m.params.size" :min="0.05" :max="6" :step="0.01" @begin="edit" @update:model-value="m.params.size = $event" />
-      <SliderRow v-if="hasRadius" label="半径" :model-value="m.params.radius" :min="0.02" :max="4" :step="0.01" @begin="edit" @update:model-value="m.params.radius = $event" />
-      <SliderRow v-if="hasTube" label="管径" :model-value="m.params.tube" :min="0.01" :max="1.2" :step="0.01" @begin="edit" @update:model-value="m.params.tube = $event" />
-      <SliderRow v-if="hasThickness" label="厚度" :model-value="m.params.thickness" :min="0.01" :max="1.2" :step="0.01" @begin="edit" @update:model-value="m.params.thickness = $event" />
-      <SliderRow v-if="m.geometry === 'arc'" label="扫掠角" :model-value="m.params.angle" :min="5" :max="359" :step="1" :digits="0" @begin="edit" @update:model-value="m.params.angle = $event" />
-      <SliderRow v-if="hasSeg" label="分段" :model-value="m.params.segments" :min="3" :max="160" :step="1" :digits="0" @begin="edit" @update:model-value="m.params.segments = $event" />
-      <SliderRow v-if="isDeform" label="细分" :model-value="m.params.detail" :min="0" :max="3" :step="1" :digits="0" @begin="edit" @update:model-value="m.params.detail = $event" />
-      <SliderRow v-if="isDeform" label="形变" :model-value="m.params.deform" :min="0" :max="1" :step="0.01" @begin="edit" @update:model-value="m.params.deform = $event" />
-      <SliderRow v-if="isDeform" label="随机种子" :model-value="m.params.seed" :min="1" :max="60" :step="1" :digits="0" @begin="edit" @update:model-value="m.params.seed = $event" />
-      <div class="row2">
-        <span class="rl">变种</span>
-        <div class="vchips">
-          <button
-            class="vchip"
-            v-for="v in MODEL_VARIANTS"
-            :key="v.id"
-            :class="{ on: (m.params.variant ?? 0) === v.id }"
-            :title="v.hint"
-            @click="setVariant(v.id)"
-          >
-            {{ v.name }}
-          </button>
+      <template v-if="m.geometry !== 'imported'">
+        <SliderRow v-if="hasSize" :label="sizeLabel" :model-value="m.params.size" :min="0.05" :max="6" :step="0.01" @begin="edit" @update:model-value="m.params.size = $event" />
+        <SliderRow v-if="hasRadius" label="半径" :model-value="m.params.radius" :min="0.02" :max="4" :step="0.01" @begin="edit" @update:model-value="m.params.radius = $event" />
+        <SliderRow v-if="hasTube" label="管径" :model-value="m.params.tube" :min="0.01" :max="1.2" :step="0.01" @begin="edit" @update:model-value="m.params.tube = $event" />
+        <SliderRow v-if="hasThickness" label="厚度" :model-value="m.params.thickness" :min="0.01" :max="1.2" :step="0.01" @begin="edit" @update:model-value="m.params.thickness = $event" />
+        <SliderRow v-if="m.geometry === 'arc'" label="扫掠角" :model-value="m.params.angle" :min="5" :max="359" :step="1" :digits="0" @begin="edit" @update:model-value="m.params.angle = $event" />
+        <SliderRow v-if="hasSeg" label="分段" :model-value="m.params.segments" :min="3" :max="160" :step="1" :digits="0" @begin="edit" @update:model-value="m.params.segments = $event" />
+        <SliderRow v-if="isDeform" label="细分" :model-value="m.params.detail" :min="0" :max="3" :step="1" :digits="0" @begin="edit" @update:model-value="m.params.detail = $event" />
+        <SliderRow v-if="isDeform" label="形变" :model-value="m.params.deform" :min="0" :max="1" :step="0.01" @begin="edit" @update:model-value="m.params.deform = $event" />
+        <SliderRow v-if="isDeform" label="随机种子" :model-value="m.params.seed" :min="1" :max="60" :step="1" :digits="0" @begin="edit" @update:model-value="m.params.seed = $event" />
+        <div class="row2">
+          <span class="rl">变种</span>
+          <div class="vchips">
+            <button
+              class="vchip"
+              v-for="v in MODEL_VARIANTS"
+              :key="v.id"
+              :class="{ on: (m.params.variant ?? 0) === v.id }"
+              :title="v.hint"
+              @click="setVariant(v.id)"
+            >
+              {{ v.name }}
+            </button>
+          </div>
         </div>
-      </div>
-      <div class="vhint">{{ variantHint }}</div>
+        <div class="vhint">{{ variantHint }}</div>
+      </template>
     </Section>
 
     <Section title="材质">
@@ -87,7 +102,7 @@ import { computed } from 'vue'
 import type { GeoKind, ModelDoc } from '../core/types'
 import { defaultParams } from '../core/types'
 import { GEO_LIST, MODEL_VARIANTS } from '../core/geometry'
-import { S, pushHistory } from '../core/store'
+import { S, MODEL_CATEGORIES, pushHistory, setModelCategory } from '../core/store'
 import { canvasToDataURL } from '../core/textures'
 import Section from './ui/Section.vue'
 import SliderRow from './ui/SliderRow.vue'
@@ -128,5 +143,16 @@ const variantHint = computed(() => {
 function setVariant(id: number) {
   edit()
   props.m.params.variant = id
+}
+
+/* ------------------------------ 上传模型 ------------------------------ */
+const asset = computed(() => (S.doc.modelAssets || []).find((a) => a.id === props.m.assetId))
+const assetName = computed(() => asset.value?.name || '（资产已丢失）')
+const assetSize = computed(() => (asset.value ? `${asset.value.sizeKB} KB` : ''))
+const assetTris = computed(() => asset.value?.tris || 0)
+
+function changeCategory(category: string) {
+  if (!asset.value) return
+  setModelCategory(asset.value.id, category)
 }
 </script>

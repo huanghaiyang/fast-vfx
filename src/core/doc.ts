@@ -130,8 +130,7 @@ export function createModel(kind: GeoKind = 'box', overrides: DeepPartial<ModelD
   return merge(doc, overrides) as ModelDoc
 }
 
-export function geoLabel(kind: GeoKind): string {
-  const map: Record<GeoKind, string> = {
+export function geoLabel(kind: GeoKind): string {  const map: Record<GeoKind, string> = {
     box: '立方体',
     sphere: '球体',
     icosahedron: '多面体',
@@ -145,9 +144,26 @@ export function geoLabel(kind: GeoKind): string {
     disc: '圆盘',
     arc: '弧形刀光',
     crystal: '晶体',
-    rock: '岩石'
+    rock: '岩石',
+    imported: '上传模型'
   }
   return map[kind] || kind
+}
+
+/** 由上传资产创建实例：材质保持中性，实际外观用 GLB 自带的 */
+export function createImportedModel(asset: { id: string; name: string }): ModelDoc {
+  const doc = createModel('imported', {
+    name: asset.name,
+    transform: { position: [0, 0.4, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }
+  })
+  doc.assetId = asset.id
+  doc.params.radius = 0.6
+  doc.material.color = '#ffffff'
+  doc.material.emissive = '#000000'
+  doc.material.emissiveIntensity = 0
+  doc.material.metalness = 0.3
+  doc.material.roughness = 0.6
+  return doc
 }
 
 export const BASE_TEXTURES: TextureAsset[] = [
@@ -178,7 +194,8 @@ export function emptyDoc(name = '新特效'): EffectDoc {
     camera: { position: [0, 2.2, 6], target: [0, 1, 0], fov: 45 },
     objects: [],
     tracks: [],
-    textures: BASE_TEXTURES.map((t) => ({ ...t }))
+    textures: BASE_TEXTURES.map((t) => ({ ...t })),
+    modelAssets: []
   }
 }
 

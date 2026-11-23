@@ -7,6 +7,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import type { EffectDoc, FXObject, Keyframe, ModelDoc, ParticleDoc, Track, Vec3 } from './types'
 import { buildGeometry, geometryKey, DOUBLE_SIDED_KINDS } from './geometry'
+import { instantiateModel } from './assets'
 import { ParticleSystem } from './particles'
 import { getTexture } from './textures'
 
@@ -35,6 +36,8 @@ interface Runtime {
   picker: THREE.Mesh
   particle?: ParticleSystem
   mesh?: THREE.Mesh
+  imported?: THREE.Group
+  importedToken?: number
   material?: THREE.MeshStandardMaterial
   geoKey?: string
   opacity: number
@@ -222,6 +225,10 @@ export class FXEngine {
     }
     if (obj.kind === 'model') {
       const rtM = rt as Runtime
+      if (obj.geometry === 'imported') {
+        this.updateImported(rtM, obj, doc)
+        return
+      }
       const key = geometryKey(obj.geometry, obj.params)
       if (!rtM.mesh) {
         const geo = buildGeometry(obj.geometry, obj.params)
@@ -242,8 +249,48 @@ export class FXEngine {
     }
   }
 
-  private applyModelMaterial(rt: Runtime, obj: ModelDoc, doc: EffectDoc) {
-    const m = rt.material!
+  /** 上传模型：异步解析 GLB（来自 data/models 或临时 base64），成功后挂到运行时组上 */
+  private updateImported(rt: Runtime, obj: ModelDoc, doc: EffectDoc) {
+    const asset = (doc.modelAssets || []).find((a) => a.id === obj.assetId)
+    const ref = asset?.url || asset?.dataUrl
+    if (!ref) {
+      rt.geoKey = `imp|${obj.assetId || ''}|missing`
+      return
+    }
+    const key = `imp|${ref}`
+    if (rt.geoKey === key && rt.imported) return
+    rt.geoKey = key
+    if (rt.imported) {
+      rt.group.remove(rt.imported)
+      rt.imported = undefined
+    }
+    const token = (rt.importedToken || 0) + 1
+    rt.importedToken = token
+    const opacity = obj.material.opacity
+    instantiateModel(ref)
+      .then((g) => {
+        if (rt.importedToken !== token) return
+        g.traverse((o) => {
+          o.userData.fxId = obj.id
+          const mesh = o as THREE.Mesh
+          if (!mesh.isMesh) return
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+          for (const m of mats) {
+            if (opacity < 1) {
+              m.transparent = true
+              m.opacity = opacity
+            }
+            m.needsUpdate = true
+          }
+        })
+        rt.imported = g
+        rt.group.add(g)
+        this.dirty = true
+      })
+      .catch((err) => console.warn('[FastVFX] GLB 解析失败', err))
+  }
+
+  private applyModelMaterial(rt: Runtime, obj: ModelDoc, doc: EffectDoc) {    const m = rt.material!
     const mat = obj.material
     const tex = mat.textureId ? getTexture(doc.textures.find((t) => t.id === mat.textureId)) : null
     m.map = tex
