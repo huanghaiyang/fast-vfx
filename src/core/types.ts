@@ -122,6 +122,7 @@ export interface GeoParams {
   detail: number
   deform: number
   seed: number
+  variant?: number // 0 = 原始形状，1..8 = 变种
 }
 
 export interface ModelMaterial {
@@ -214,7 +215,8 @@ export function defaultParams(kind: GeoKind): GeoParams {
     angle: 360,
     detail: 1,
     deform: 0,
-    seed: 1
+    seed: 1,
+    variant: 0
   }
   switch (kind) {
     case 'torus':

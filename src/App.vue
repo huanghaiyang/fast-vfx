@@ -99,6 +99,12 @@ onMounted(() => {
     }
     S.version++
   }
+  // 调试：?variant=2 把场景里所有模型换成第 2 号变种
+  const varN = parseInt(q.get('variant') || '', 10)
+  if (varN >= 0 && varN <= 8) {
+    for (const o of S.doc.objects) if (o.kind === 'model') o.params.variant = varN
+    S.version++
+  }
 })
 
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))

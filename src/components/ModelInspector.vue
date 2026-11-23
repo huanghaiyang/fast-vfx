@@ -16,6 +16,22 @@
       <SliderRow v-if="isDeform" label="细分" :model-value="m.params.detail" :min="0" :max="3" :step="1" :digits="0" @begin="edit" @update:model-value="m.params.detail = $event" />
       <SliderRow v-if="isDeform" label="形变" :model-value="m.params.deform" :min="0" :max="1" :step="0.01" @begin="edit" @update:model-value="m.params.deform = $event" />
       <SliderRow v-if="isDeform" label="随机种子" :model-value="m.params.seed" :min="1" :max="60" :step="1" :digits="0" @begin="edit" @update:model-value="m.params.seed = $event" />
+      <div class="row2">
+        <span class="rl">变种</span>
+        <div class="vchips">
+          <button
+            class="vchip"
+            v-for="v in MODEL_VARIANTS"
+            :key="v.id"
+            :class="{ on: (m.params.variant ?? 0) === v.id }"
+            :title="v.hint"
+            @click="setVariant(v.id)"
+          >
+            {{ v.name }}
+          </button>
+        </div>
+      </div>
+      <div class="vhint">{{ variantHint }}</div>
     </Section>
 
     <Section title="材质">
@@ -70,7 +86,7 @@
 import { computed } from 'vue'
 import type { GeoKind, ModelDoc } from '../core/types'
 import { defaultParams } from '../core/types'
-import { GEO_LIST } from '../core/geometry'
+import { GEO_LIST, MODEL_VARIANTS } from '../core/geometry'
 import { S, pushHistory } from '../core/store'
 import { canvasToDataURL } from '../core/textures'
 import Section from './ui/Section.vue'
@@ -101,6 +117,16 @@ function changeKind(kind: string) {
   props.m.geometry = kind as GeoKind
   const def = defaultParams(kind as GeoKind)
   const keep = { ...props.m.params }
-  props.m.params = { ...def, seed: keep.seed || def.seed }
+  props.m.params = { ...def, seed: keep.seed || def.seed, variant: keep.variant ?? 0 }
+}
+
+const variantHint = computed(() => {
+  const v = MODEL_VARIANTS.find((x) => x.id === (props.m.params.variant ?? 0))
+  return v ? `${v.name} · ${v.hint}` : ''
+})
+
+function setVariant(id: number) {
+  edit()
+  props.m.params.variant = id
 }
 </script>
