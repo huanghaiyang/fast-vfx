@@ -84,6 +84,14 @@ export function createParticle(overrides: DeepPartial<ParticleDoc> = {}): Partic
       [0.25, 1],
       [1, 0.6]
     ]),
+    speedCurve: c([
+      [0, 1],
+      [1, 1]
+    ]),
+    spinCurve: c([
+      [0, 1],
+      [1, 1]
+    ]),
     gradient: grad([
       [0, '#fff2c4'],
       [0.35, '#ffa02c'],
@@ -99,7 +107,8 @@ export function createParticle(overrides: DeepPartial<ParticleDoc> = {}): Partic
       opacity: 1,
       fadeIn: 0.12,
       fadeOut: 0.35
-    }
+    },
+    sub: { enabled: false, targetId: '', trigger: 'death', count: 6, inherit: 0.4, spread: 55 }
   }
   return merge(doc, overrides) as ParticleDoc
 }
@@ -209,6 +218,17 @@ export function emptyDoc(name = '新特效'): EffectDoc {
 
 export function cloneDoc(doc: EffectDoc): EffectDoc {
   return JSON.parse(JSON.stringify(doc)) as EffectDoc
+}
+
+/** 老工程 / 外部 JSON 里缺的新字段补上默认值，避免读档后粒子参数为 undefined */
+export function normalizeDoc(doc: EffectDoc): EffectDoc {
+  for (const o of doc.objects) {
+    if (o.kind !== 'particles') continue
+    if (!o.speedCurve) o.speedCurve = { points: [{ t: 0, v: 1 }, { t: 1, v: 1 }] }
+    if (!o.spinCurve) o.spinCurve = { points: [{ t: 0, v: 1 }, { t: 1, v: 1 }] }
+    if (!o.sub) o.sub = { enabled: false, targetId: '', trigger: 'death', count: 6, inherit: 0.4, spread: 55 }
+  }
+  return doc
 }
 
 export function mergeTrack(tracks: Track[], targetId: string, property: Track['property'], t: number, v: number | Vec3) {

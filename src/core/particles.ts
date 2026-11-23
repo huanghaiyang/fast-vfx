@@ -138,8 +138,26 @@ export class ParticleSystem {
   private emitStarted = false
 
   private curveLUT: Float32Array = new Float32Array(64)
-  private colorLUT: Float32Array = new Float32Array(64 * 3)
+  private speedLUT: Float32Array = new Float32Array(64)
+  private spinLUT: Float32Array = new Float32Array(64)
+  private colorLUT: Float32Array = new Float32Array(64 * 4)
   private lutKey = ''
+
+  /** 子发射回调：父粒子消亡/触地时把位置、速度与事件时间交给引擎路由 */
+  onSpawn:
+    | ((x: number, y: number, z: number, vx: number, vy: number, vz: number, at: number, spread: number) => void)
+    | null = null
+  /** 外部注入队列（子发射写入，下一次 simulate 消化；at 早于当前时间的才注入） */
+  private inject: Array<{
+    x: number
+    y: number
+    z: number
+    vx: number
+    vy: number
+    vz: number
+    spread: number
+    at: number
+  }> = []
 
   /** 固定种子的伪随机：暂停后重新 seek 必须复现同一帧，否则切个开关画面就换样 */
   private randState = 0x9e3779b9
@@ -361,9 +379,16 @@ export class ParticleSystem {
     }
     if (r.maxCount !== this.max) this.setMax(r.maxCount)
 
-    const key = JSON.stringify([this.doc.sizeCurve, this.doc.gradient])
+    const key = JSON.stringify([
+      this.doc.sizeCurve,
+      this.doc.speedCurve,
+      this.doc.spinCurve,
+      this.doc.gradient
+    ])
     if (key !== this.lutKey) {
       this.curveLUT = buildCurveLUT(this.doc.sizeCurve, 64)
+      this.speedLUT = buildCurveLUT(this.doc.speedCurve, 64)
+      this.spinLUT = buildCurveLUT(this.doc.spinCurve, 64)
       this.colorLUT = buildGradientLUT(this.doc.gradient, 64)
       this.lutKey = key
     }
@@ -376,6 +401,7 @@ export class ParticleSystem {
     this.burstTimer = 0
     this.emitElapsed = 0
     this.emitStarted = false
+    this.inject.length = 0
     this.seedRand(this.doc.name)
   }
 
@@ -401,6 +427,55 @@ export class ParticleSystem {
       .addScaledVector(t2, Math.sin(phi) * sinT)
       .normalize()
     return out
+  }
+
+  /** 由子发射器注入的粒子：直接落在给定位置，速度继承父粒子并随机扩散 */
+  private emitInjected(p: { x: number; y: number; z: number; vx: number; vy: number; vz: number; spread: number }) {
+    if (this.count >= this.max) return
+    const e = this.doc.emission
+    const m = this.motionOf()
+    const s = this.doc.spin
+    const i = this.count++
+    const rnd = (a: number, b: number) => a + this.rand() * (b - a)
+
+    const base = new THREE.Vector3(p.vx, p.vy, p.vz)
+    if (base.lengthSq() < 1e-8) base.set(0, 1, 0)
+    base.normalize()
+    // 触地注入时父速度是朝下的，直接沿用会让子粒子下一秒就摔穿地面——统一反射成向上
+    if (base.y < 0) base.y = Math.abs(base.y) * 0.7
+    const dir = this.sampleDir(base, p.spread, new THREE.Vector3())
+    const speed = rnd(m.speedMin, m.speedMax)
+
+    this.px[i] = p.x
+    this.py[i] = Math.max(0, p.y)
+    this.pz[i] = p.z
+    this.vx[i] = dir.x * speed
+    this.vy[i] = dir.y * speed
+    this.vz[i] = dir.z * speed
+    this.age[i] = 0
+    this.life[i] = Math.max(0.02, rnd(e.lifetimeMin, e.lifetimeMax))
+    this.angle[i] = THREE.MathUtils.degToRad(rnd(s.angleMin, s.angleMax))
+    this.angVel[i] = THREE.MathUtils.degToRad(rnd(s.speedMin, s.speedMax))
+    this.seed[i] = this.rand()
+  }
+
+  private motionOf() {
+    return this.doc.motion
+  }
+
+  /** 父系统调用：在一点注入一簇粒子（spread 为方向随机，度；at 为事件发生的时间点） */
+  spawnBurst(
+    x: number,
+    y: number,
+    z: number,
+    vx: number,
+    vy: number,
+    vz: number,
+    count: number,
+    spread: number,
+    at = this.emitElapsed
+  ) {
+    for (let k = 0; k < count; k++) this.inject.push({ x, y, z, vx, vy, vz, spread, at })
   }
 
   private emitOne() {
@@ -513,6 +588,16 @@ export class ParticleSystem {
     this.emitElapsed += dt
     const emitting = e.duration <= 0 || this.emitElapsed < e.duration
 
+    // 子发射注入（父粒子死亡/触地时压进来的）：只放行事件时间已到的，快进回放才能对齐
+    if (this.inject.length) {
+      const now = this.emitElapsed
+      const pending: typeof this.inject = []
+      const ready: typeof this.inject = []
+      for (const it of this.inject) (it.at <= now + 1e-4 ? ready : pending).push(it)
+      this.inject = pending
+      for (const it of ready) this.emitInjected(it)
+    }
+
     if (emitting && e.rate > 0) {
       this.rateAcc += e.rate * dt
       let n = Math.floor(this.rateAcc)
@@ -528,9 +613,27 @@ export class ParticleSystem {
     }
 
     const step = dt
+    const sub = this.doc.sub
     for (let i = 0; i < this.count; i++) {
       this.age[i] += step
-      if (this.age[i] >= this.life[i]) {
+      const lt0 = this.age[i] / this.life[i]
+      let hitGround = false
+      if (sub?.enabled && sub.trigger === 'ground' && this.py[i] < 0) hitGround = true
+      if (lt0 >= 1 || hitGround) {
+        // 子发射：消亡 / 触地时把位置与（按 inherit 缩放的）速度交给引擎路由
+        if (sub?.enabled && (hitGround || sub.trigger === 'death') && this.onSpawn) {
+          const inh = Math.max(0, Math.min(1, sub.inherit))
+          this.onSpawn(
+            this.px[i],
+            Math.max(0, this.py[i]),
+            this.pz[i],
+            this.vx[i] * inh,
+            this.vy[i] * inh,
+            this.vz[i] * inh,
+            this.emitElapsed,
+            Math.max(0, sub.spread)
+          )
+        }
         // swap-remove
         const last = this.count - 1
         if (i !== last) {
@@ -578,11 +681,16 @@ export class ParticleSystem {
         this.vz[i] = tvz
       }
 
-      this.px[i] += this.vx[i] * step
-      this.py[i] += this.vy[i] * step
-      this.pz[i] += this.vz[i] * step
+      // 生命内速度 / 自旋倍率曲线
+      const li = Math.min(63, Math.max(0, Math.round(lt0 * 63)))
+      const spd = this.speedLUT[li]
+      const spr = this.spinLUT[li]
 
-      this.angle[i] += this.angVel[i] * step
+      this.px[i] += this.vx[i] * step * spd
+      this.py[i] += this.vy[i] * step * spd
+      this.pz[i] += this.vz[i] * step * spd
+
+      this.angle[i] += this.angVel[i] * spr * step
     }
   }
 
@@ -615,7 +723,7 @@ export class ParticleSystem {
       vel[i * 3 + 1] = this.vy[i]
       vel[i * 3 + 2] = this.vz[i]
 
-      const ci = Math.min(63, Math.round(lt * 63)) * 3
+      const ci = Math.min(63, Math.round(lt * 63)) * 4
       // 粒度：每颗粒子的尺寸与亮度都带随机，避免整片粒子像同一张贴图复制
       const jitter = 0.82 + sd[i] * 0.42
       col[i * 4] = lut[ci] * brightness * (0.86 + sd[i] * 0.28)
@@ -624,7 +732,8 @@ export class ParticleSystem {
 
       const fi = r.fadeIn > 0.001 ? lt / r.fadeIn : 1
       const fo = r.fadeOut > 0.001 ? (1 - lt) / r.fadeOut : 1
-      col[i * 4 + 3] = Math.min(1, fi, fo, 1)
+      // 淡入淡出 × 渐变色标透明度（生命内颜色曲线）
+      col[i * 4 + 3] = Math.min(1, fi, fo, lut[ci + 3])
 
       const si = Math.min(63, Math.round(lt * 63))
       const baseSize = this.overrides.size ?? this.doc.sizeBase
@@ -657,9 +766,9 @@ export class ParticleSystem {
     this.flush()
   }
 
-  /** 时间轴回放/拖拽：从 0 快进到目标时间 */
-  seekTo(time: number) {
-    this.reset()
+  /** 时间轴回放/拖拽：从 0 快进到目标时间；skipReset 用于引擎先统一 reset 再逐个快进（子发射需要） */
+  seekTo(time: number, skipReset = false) {
+    if (!skipReset) this.reset()
     const step = 1 / 30
     let t = 0
     while (t < time - 1e-6) {
@@ -669,6 +778,11 @@ export class ParticleSystem {
     }
     this.mat.uniforms.uTime.value = this.emitElapsed
     this.flush()
+  }
+
+  /** 清空待注入队列（引擎统一 reset 阶段调用，避免上一轮残留） */
+  clearInject() {
+    this.inject.length = 0
   }
 
   get alive() {

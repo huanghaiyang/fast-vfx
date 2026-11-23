@@ -18,12 +18,13 @@ npm run build    # 产物在 dist/
 
 ## 功能
 
-### 预设库（22 套，按分类分组）
+### 预设库（23 套，按分类分组）
 
 - **火焰**：烈焰、烈焰喷射、火球术、火焰冲击波、烈焰风暴、岩浆喷发、灼烧地面、火焰护体、龙息、灰烬爆破、火刃斩
 - **元素**：冰霜新星、雷电冲击、陨石坠落、剧毒领域
 - **战斗**：冲击爆炸、斩击刀光
 - **法术**：奥术法阵、圣光护盾、暗影侵蚀、虚空裂隙、治疗光环
+- **演示**：子发射演示（喷柱火种触地溅射火星 + 飘散余烬寿命碎裂成尘，同时演示速度/自旋曲线与色标透明度）
 
 每套预设都带完整对象、材质、粒子参数与关键帧轨道，载入即可播放，也可在时间轴上继续改。
 
@@ -34,7 +35,9 @@ npm run build    # 产物在 dist/
 - 发射：速率、爆发（数量 / 间隔）、单次发射时长、寿命区间
 - 形状：点 / 球体（可仅表面）/ 长方体 / 锥形（带锥角）/ 圆面 / 圆环
 - 运动：初速区间、主方向、扩散角、重力、阻尼、湍流场（强度 + 尺度）、径向外推、绕 Y 漩涡
-- 外观：基础尺寸 + 生命内尺寸曲线、生命内颜色渐变（色标编辑）、亮度、淡入/淡出
+- 外观：基础尺寸 + 生命内尺寸曲线、生命内速度倍率曲线、生命内自旋倍率曲线、生命内颜色渐变（色标颜色 + 色标透明度）、亮度、淡入/淡出
+- 生命曲线：三条曲线都按「当前生命进度 0→1」采样。尺寸曲线缩放大小；速度/自旋曲线是倍率（1 = 原始值，末端拉到 0 就是减速停住 / 停转）；色标透明度与淡入淡出相乘，可做「出生半透明 → 中段最浓 → 化掉」
+- 子发射：某对象可以指定另一粒子对象作为接收方，在自己粒子**寿命结束**或**触地（世界 y < 0）**时，把位置与按「速度继承」缩放后的速度注入过去，附带数量与方向扩散角。注入事件带时间戳，因此拖时间轴快进回放也能在正确的时刻爆开，而不是全部挤在 0 秒
 - 旋转：初始角区间、自旋速度、朝向速度对齐、沿速度拉伸（屏幕空间投影）
 - 多火头：**簇**（同时存在的火头数量，1 = 单簇）+ **簇散布**（火头在发射面上的散开半径），配合**范围**（发射半径）与**尺寸**，构成火焰类特效的四个主参数，且全部可打关键帧
 
@@ -157,9 +160,17 @@ A · 0.00s        变化项        B · 0.90s
 
 OrbitControls 环绕、TransformControls 移动/旋转/缩放、点选对象、选中包围盒、网格地面、UnrealBloom 泛光、ACES 色调映射、FPS 统计。
 
+### 成片输出（PNG 序列 / WebM）
+
+顶部 **⤓ 导出 ▾** 下拉菜单有三条出口，帧率可在菜单里切 24 / 30 / 60：
+
+- **PNG 序列**：按当前机位逐帧 `renderFrame(t)` 渲染整段时长，`toBlob` 后打包成 `<项目名>_png_<fps>fps_<帧数>frames.zip`，帧名 `frame_0001.png` 顺序编号，zip 内附 `frames.json`（fps / 帧数 / 时长 / 分辨率）。逐帧渲染会临时停掉播放并在结束后恢复，不会改动时间轴状态
+- **WebM 成片**：`canvas.captureStream(fps)` + `MediaRecorder`（优先 VP9，回退 VP8），录制前临时关闭 `循环`、把时间轴拉回 0 并清空所有发射器，录满「时长 + 0.3s」余量后停止并还原循环开关
+- 画布用 `preserveDrawingBuffer: true`，否则 WebGL 缓冲在合成后就被清掉，`toBlob` / `captureStream` 会拿到空白帧
+
 ## 导出 Godot 4
 
-点击顶部 **导出 Godot**，生成 `<slug>_godot.zip`：
+点击顶部 **导出 ▾ → Godot 工程包**，生成 `<slug>_godot.zip`：
 
 ```
 <slug>/
@@ -187,7 +198,7 @@ fx.position = Vector3(0, 0, 0)
 | 发射形状 | `EMISSION_SHAPE_POINT / SPHERE / BOX / RING` |
 | 初速 / 扩散 / 重力 / 阻尼 | `initial_velocity_*` / `spread` / `gravity` / `damping_*` |
 | 尺寸曲线 | `scale_curve`（CurveTexture） |
-| 颜色渐变 + 淡入淡出 | `color_ramp`（GradientTexture1D，16 点采样） |
+| 颜色渐变 + 淡入淡出 + 色标透明度 | `color_ramp`（GradientTexture1D，16 点采样；alpha = 色标透明度 × 淡入淡出 × 不透明度） |
 | 加色混合 | `BLEND_MODE_ADD` + 无光照 + 关闭深度写入 |
 | 内置几何体 | GLB（导入失败时回退到 Box/Sphere/Torus/Cylinder/Capsule/PlaneMesh） |
 | 关键帧 | `AnimationPlayer`（position / quaternion / scale / transparency） |
@@ -198,6 +209,8 @@ fx.position = Vector3(0, 0, 0)
 - 发射器的局部持续时长、按间隔重复爆发不参与导出
 - 湍流为近似参数映射
 - **范围 / 簇 / 尺寸** 三条参数轨道仅编辑器内生效：Godot 粒子没有对应属性，导出时使用静态值并在包内 README 列入 warnings（要动画化请在 Godot 里改发射半径或 `scale`）
+- **生命内速度 / 自旋倍率曲线**：Godot 侧只导出静态初速与角速度，曲线不随包走（warnings 会点出哪些对象用了）
+- **子发射**：运行时脚本不支持跨发射器注入，需在 Godot 里用 `GPUParticles3D.sub_emitter` 自行接
 - 相机机位不随特效导出
 - 变种几何随 GLB 完整导出；只有在 GLB 导入失败、退回 `godotPrimitive` 图元时，变种会退化成基础图元
 
@@ -211,10 +224,11 @@ src/
     curve.ts        曲线求值、渐变 LUT（sRGB→线性）
     textures.ts     20 种程序化贴图（×24 变形）生成 + three 纹理缓存
     geometry.ts     14 种参数化几何体 + Godot 图元兜底映射
-    particles.ts    粒子模拟 + 实例化着色器（拉伸 / 对齐 / 曲线 / 渐变）
-    engine.ts       场景、相机、后处理、拾取、Gizmo、时间轴求值
-    presets.ts      22 套内置特效预设（火焰 / 元素 / 战斗 / 法术 四类）
+    particles.ts    粒子模拟 + 实例化着色器（拉伸 / 对齐 / 曲线 / 渐变 / 子发射注入）
+    engine.ts       场景、相机、后处理、拾取、Gizmo、时间轴求值、renderFrame
+    presets.ts      23 套内置特效预设（火焰 / 元素 / 战斗 / 法术 / 演示 五类）
     store.ts        响应式状态、历史记录、自动存档、导入导出
+    capture.ts      PNG 序列打包 / WebM 录制
     godotExport.ts  GLB + 贴图 + JSON + GDScript 打包
     godotRuntime.ts 导出的 GDScript 运行时源码
     assets.ts       GLB 解析 / 实例化 / 缓存 + dev 服务器模型落盘接口
@@ -222,6 +236,10 @@ src/
   components/       顶栏、资源面板、视口、检查器、时间轴、曲线/渐变编辑器
 data/
   models/          上传的 GLB 模型（跟项目一起版本管理）
+tools/
+  qa-capture.mjs   CDP 验收：无头 Chrome 跑 PNG 序列 / WebM 并检查产物
+  qa-shot.mjs      CDP 截图（可先执行一段 JS 再截长图）
+  qa-eval.mjs      CDP 调试：在运行中的编辑器里执行表达式
 ```
 
 ## 快捷键

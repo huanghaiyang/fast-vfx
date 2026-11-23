@@ -15,9 +15,20 @@
       <button @click="openInput?.click()">打开</button>
       <input ref="openInput" type="file" accept=".json,application/json" hidden @change="onOpen" />
       <button @click="saveProject()">保存项目</button>
-      <button class="primary" :disabled="S.busy" @click="doExport">
-        {{ S.busy ? '导出中…' : '⤓ 导出 Godot' }}
-      </button>
+      <div class="exwrap" ref="exWrap">
+        <button class="primary" :disabled="S.busy" @click="menuOpen = !menuOpen">
+          {{ S.busy ? '处理中…' : '⤓ 导出 ▾' }}
+        </button>
+        <div class="exmenu" v-if="menuOpen">
+          <button @click="pick('godot')"><b>Godot 工程包</b><i>.zip · vfx.json + 运行时脚本 + 贴图 + GLB</i></button>
+          <div class="exrow">
+            <span>帧率</span>
+            <button v-for="f in [24, 30, 60]" :key="f" :class="['chip', { on: fps === f }]" @click="fps = f">{{ f }}</button>
+          </div>
+          <button @click="pick('png')"><b>PNG 序列</b><i>逐帧渲染 → zip · {{ Math.round(S.doc.duration * fps) }} 帧</i></button>
+          <button @click="pick('webm')"><b>WebM 成片</b><i>实时录制舞台画布 · {{ fps }} fps</i></button>
+        </div>
+      </div>
     </div>
 
     <div class="right">
@@ -31,11 +42,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { S, A, pushHistory, saveProject, importProject, downloadBlob, toast, captureCameraQuiet } from '../core/store'
 import { buildGodotPackage } from '../core/godotExport'
+import { exportPngSequence, exportWebm } from '../core/capture'
 
 const openInput = ref<HTMLInputElement>()
+const exWrap = ref<HTMLElement>()
+const menuOpen = ref(false)
+const fps = ref(30)
+
+function onDocDown(e: MouseEvent) {
+  if (!menuOpen.value) return
+  if (exWrap.value && !exWrap.value.contains(e.target as Node)) menuOpen.value = false
+}
+onMounted(() => document.addEventListener('pointerdown', onDocDown))
+onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocDown))
+
+async function pick(kind: 'godot' | 'png' | 'webm') {
+  menuOpen.value = false
+  if (kind === 'png') return exportPngSequence({ fps: fps.value })
+  if (kind === 'webm') return exportWebm({ fps: fps.value })
+  return doExport()
+}
 
 async function doExport() {
   if (S.busy) return
@@ -125,6 +154,71 @@ async function onOpen(e: Event) {
   display: flex;
   gap: 6px;
   flex: 1;
+}
+.exwrap {
+  position: relative;
+}
+.exmenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  width: 268px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #12141d;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.6);
+}
+.exmenu > button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 9px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  text-align: left;
+  color: var(--txt);
+}
+.exmenu > button:hover {
+  background: rgba(244, 119, 42, 0.1);
+  border-color: rgba(244, 119, 42, 0.3);
+}
+.exmenu > button b {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #e9ecf3;
+}
+.exmenu > button i {
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--dim-2);
+}
+.exrow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px 6px;
+  font-size: 11px;
+  color: var(--dim);
+}
+.exrow .chip {
+  padding: 2px 8px;
+  font-size: 10.5px;
+  border-radius: 99px;
+  border: 1px solid var(--line-soft);
+  background: #0a0c12;
+  color: var(--dim);
+}
+.exrow .chip.on {
+  color: #ffd9bf;
+  border-color: rgba(244, 119, 42, 0.5);
+  background: rgba(244, 119, 42, 0.14);
 }
 .right {
   margin-left: auto;

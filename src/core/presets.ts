@@ -6,7 +6,7 @@ function track(targetId: string, property: TrackProperty, keys: Array<[number, n
   return { id: uid('tr'), targetId, property, keys: keys.map(([t, v]) => ({ t, v })), smooth }
 }
 
-export type PresetTag = '火焰' | '元素' | '战斗' | '法术'
+export type PresetTag = '火焰' | '元素' | '战斗' | '法术' | '演示'
 
 /** 地面光晕：所有火焰类特效脚下都要有一层暖光，否则火像悬在黑板上 */
 function glowDisc(name: string, radius: number, opacity: number, color = '#ff7a1e', emissive = '#ff3c00', y = 0.02): ModelDoc {
@@ -2752,6 +2752,159 @@ function buildFlameSlash(): EffectDoc {
   return doc
 }
 
+function buildSubEmit(): EffectDoc {
+  const doc = emptyDoc('子发射演示')
+  doc.duration = 3
+  doc.bloomStrength = 0.5
+  doc.camera = { position: [0, 2.9, 6.4], target: [0, 1.1, 0], fov: 45 }
+
+  // 母体 A：向上喷射的火种，落到地面时溅起火星（触地触发）
+  const fountain = createParticle({
+    name: '喷柱火种',
+    transform: { position: [0, 1.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+    emission: { rate: 70, shape: 'cone', radius: 0.1, coneAngle: 10, lifetimeMin: 1.3, lifetimeMax: 1.9, burst: false },
+    motion: {
+      speedMin: 0.8,
+      speedMax: 1.7,
+      direction: [0, 1, 0],
+      spread: 16,
+      gravity: [0, -4.2, 0],
+      damping: 0.2,
+      turbulence: 0.25,
+      turbulenceScale: 1.4
+    },
+    sizeBase: 0.2,
+    sizeCurve: c([
+      [0, 0.4],
+      [0.3, 1],
+      [1, 0.7]
+    ]),
+    gradient: grad([
+      [0, '#fff4cf'],
+      [0.4, '#ffb040'],
+      [1, '#ff3c06']
+    ]),
+    brightness: 1.6,
+    spin: { angleMin: 0, angleMax: 360, speedMin: -60, speedMax: 60, align: 1, stretch: 0.06 },
+    render: { textureId: 'tex_spark', blend: 'additive', maxCount: 600, opacity: 0.9, fadeIn: 0.05, fadeOut: 0.2 }
+  })
+  // 生命内速度曲线：先快后慢，落点更集中
+  fountain.speedCurve = c([
+    [0, 1.1],
+    [0.55, 0.8],
+    [1, 0.45]
+  ])
+  // 生命内自旋倍率：起飞快转，下落时几乎停转
+  fountain.spinCurve = c([
+    [0, 1.4],
+    [0.6, 0.7],
+    [1, 0.1]
+  ])
+  fountain.sub = { enabled: true, targetId: '', trigger: 'ground', count: 2, inherit: 0.25, spread: 78 }
+
+  // 母体 B：缓慢飘落的余烬，寿命结束时碎裂成尘（消亡触发）
+  const motes = createParticle({
+    name: '飘散余烬',
+    transform: { position: [0, 1.7, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+    emission: { rate: 26, shape: 'sphere', radius: 0.55, lifetimeMin: 0.7, lifetimeMax: 1.1, burst: false },
+    motion: {
+      speedMin: 0.1,
+      speedMax: 0.35,
+      direction: [0, -1, 0],
+      spread: 70,
+      gravity: [0, -0.45, 0],
+      damping: 0.9,
+      turbulence: 0.6,
+      turbulenceScale: 2.2
+    },
+    sizeBase: 0.14,
+    sizeCurve: c([
+      [0, 1],
+      [1, 0.6]
+    ]),
+    gradient: grad([
+      [0, '#ffd07a'],
+      [1, '#7a2400']
+    ]),
+    brightness: 1.2,
+    spin: { angleMin: 0, angleMax: 360, speedMin: -20, speedMax: 20, align: 0, stretch: 0 },
+    render: { textureId: 'tex_dust', blend: 'additive', maxCount: 500, opacity: 0.55, fadeIn: 0.08, fadeOut: 0.35 }
+  })
+  motes.sub = { enabled: true, targetId: '', trigger: 'death', count: 1, inherit: 0.15, spread: 150 }
+
+  // 接收方 C：触地溅射火星（自身不发射，全都来自子发射注入）
+  const sparks = createParticle({
+    name: '溅射火星',
+    transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+    emission: { rate: 0, shape: 'point', radius: 0.05, lifetimeMin: 0.35, lifetimeMax: 0.8, burst: false },
+    motion: {
+      speedMin: 1.1,
+      speedMax: 2.6,
+      direction: [0, 1, 0],
+      spread: 78,
+      gravity: [0, -2.6, 0],
+      damping: 0.6,
+      turbulence: 0.5,
+      turbulenceScale: 3
+    },
+    sizeBase: 0.065,
+    sizeCurve: c([
+      [0, 1],
+      [1, 0.12]
+    ]),
+    gradient: grad([
+      [0, '#ffffff'],
+      [0.5, '#ffc66a'],
+      [1, '#ff2d00']
+    ]),
+    brightness: 2.1,
+    spin: { angleMin: 0, angleMax: 360, speedMin: 0, speedMax: 0, align: 1, stretch: 0.035 },
+    render: { textureId: 'tex_spark', blend: 'additive', maxCount: 900, opacity: 1, fadeIn: 0.02, fadeOut: 0.25 }
+  })
+
+  // 接收方 D：余烬碎裂出的细尘（同样只由子发射注入）
+  const dust = createParticle({
+    name: '余烬尘',
+    transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+    emission: { rate: 0, shape: 'point', radius: 0.05, lifetimeMin: 0.8, lifetimeMax: 1.5, burst: false },
+    motion: {
+      speedMin: 0.2,
+      speedMax: 0.7,
+      direction: [0, 1, 0],
+      spread: 140,
+      gravity: [0, 0.35, 0],
+      damping: 1.4,
+      turbulence: 1.2,
+      turbulenceScale: 2.6
+    },
+    sizeBase: 0.16,
+    sizeCurve: c([
+      [0, 0.7],
+      [1, 1.15]
+    ]),
+    gradient: grad([
+      [0, '#c98a4a'],
+      [1, '#5a3418']
+    ]),
+    brightness: 1.0,
+    spin: { angleMin: 0, angleMax: 360, speedMin: -12, speedMax: 12, align: 0, stretch: 0 },
+    render: { textureId: 'tex_dust', blend: 'alpha', maxCount: 900, opacity: 0.4, fadeIn: 0.15, fadeOut: 0.5 }
+  })
+
+  fountain.sub.targetId = sparks.id
+  motes.sub.targetId = dust.id
+  // 色标透明度演示：余烬尘出生半透明、中段最浓、末段淡出
+  dust.gradient = {
+    stops: [
+      { t: 0, color: '#8a5a34', a: 0.25 },
+      { t: 0.3, color: '#6b4020', a: 0.85 },
+      { t: 1, color: '#241206', a: 0 }
+    ]
+  }
+  doc.objects = [fountain, motes, sparks, dust]
+  return doc
+}
+
 export const PRESETS: Preset[] = [
   { id: 'fire', name: '烈焰', desc: '锥形火焰 + 火星，循环燃烧', tag: '火焰', accent: '#ff7a1a', build: buildFire },
   { id: 'jet', name: '烈焰喷射', desc: '定向火舌 + 尾焰烟，持续喷射', tag: '火焰', accent: '#ffa53a', build: buildJet },
@@ -2774,5 +2927,6 @@ export const PRESETS: Preset[] = [
   { id: 'shield', name: '圣光护盾', desc: '球形护盾 + 内核网格 + 圣光粒', tag: '法术', accent: '#ffd977', build: buildShield },
   { id: 'shadow', name: '暗影侵蚀', desc: '缠绕核心 + 黑雾 + 暗影碎片', tag: '法术', accent: '#a06bff', build: buildShadow },
   { id: 'portal', name: '虚空裂隙', desc: '旋转裂隙 + 虚空核 + 螺旋微粒', tag: '法术', accent: '#c86bff', build: buildPortal },
-  { id: 'heal', name: '治疗光环', desc: '上升光点 + 叶影，绿色循环', tag: '法术', accent: '#41ff9e', build: buildHeal }
+  { id: 'heal', name: '治疗光环', desc: '上升光点 + 叶影，绿色循环', tag: '法术', accent: '#41ff9e', build: buildHeal },
+  { id: 'subemit', name: '子发射演示', desc: '触地溅射 + 寿命碎裂，验证子发射与生命曲线', tag: '演示', accent: '#ff9a3c', build: buildSubEmit }
 ]

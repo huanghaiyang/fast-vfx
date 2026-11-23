@@ -126,6 +126,19 @@
       />
       <div class="block-label">生命内尺寸曲线</div>
       <CurveEditor :model-value="p.sizeCurve" @begin="edit" @update:model-value="p.sizeCurve = $event" />
+      <div class="block-label" style="margin-top: 10px">生命内速度倍率曲线</div>
+      <CurveEditor
+        :model-value="p.speedCurve"
+        @begin="edit"
+        @update:model-value="p.speedCurve = $event"
+      />
+      <div class="block-label" style="margin-top: 10px">生命内自旋倍率曲线</div>
+      <CurveEditor
+        :model-value="p.spinCurve"
+        @begin="edit"
+        @update:model-value="p.spinCurve = $event"
+      />
+      <div class="hint">倍率按粒子当前生命进度（0→1）采样，1 = 原始速度 / 角速度；末端拉到 0 可让粒子减速停住。</div>
       <div class="block-label" style="margin-top: 12px">生命内颜色渐变</div>
       <GradientEditor :model-value="p.gradient" @begin="edit" @update:model-value="p.gradient = $event" />
       <SliderRow label="亮度" :model-value="p.brightness" :min="0.1" :max="5" :step="0.02" @begin="edit" @update:model-value="p.brightness = $event" />
@@ -180,6 +193,33 @@
       <SliderRow label="淡入" :model-value="p.render.fadeIn" :min="0" :max="0.6" :step="0.005" :digits="3" @begin="edit" @update:model-value="p.render.fadeIn = $event" />
       <SliderRow label="淡出" :model-value="p.render.fadeOut" :min="0" :max="1" :step="0.005" :digits="3" @begin="edit" @update:model-value="p.render.fadeOut = $event" />
     </Section>
+
+    <Section title="子发射">
+      <div class="sub-head">
+        <label class="chk">
+          <input type="checkbox" v-model="p.sub.enabled" @change="edit" />
+          <span>粒子消亡 / 触地时向另一个对象注入粒子</span>
+        </label>
+      </div>
+      <div class="row2">
+        <span class="rl">目标对象</span>
+        <select v-model="p.sub.targetId" @change="edit">
+          <option value="">— 选择粒子对象 —</option>
+          <option v-for="o in otherParticles" :key="o.id" :value="o.id">{{ o.name }}</option>
+        </select>
+      </div>
+      <div class="row2">
+        <span class="rl">触发条件</span>
+        <select v-model="p.sub.trigger" @change="edit">
+          <option value="death">寿命结束</option>
+          <option value="ground">触地（y &lt; 0）</option>
+        </select>
+      </div>
+      <SliderRow label="每次数量" :model-value="p.sub.count" :min="1" :max="40" :step="1" :digits="0" @begin="edit" @update:model-value="p.sub.count = Math.round($event)" />
+      <SliderRow label="速度继承" :model-value="p.sub.inherit" :min="0" :max="1" :step="0.01" @begin="edit" @update:model-value="p.sub.inherit = $event" />
+      <SliderRow label="方向扩散" :model-value="p.sub.spread" :min="0" :max="180" :step="1" :digits="0" @begin="edit" @update:model-value="p.sub.spread = $event" />
+      <div class="hint">触地判定为世界 y &lt; 0；目标对象需自己配好发射率/寿命，注入的粒子沿用目标对象的运动与外观参数。</div>
+    </Section>
   </div>
 </template>
 
@@ -228,4 +268,26 @@ const texThumb = computed(() => {
   if (t.dataUrl) return t.dataUrl
   return canvasToDataURL(t.gen, t.params, 64)
 })
+
+const otherParticles = computed(() =>
+  S.doc.objects.filter((o): o is ParticleDoc => o.kind === 'particles' && o.id !== props.p.id)
+)
 </script>
+
+<style scoped>
+.sub-head {
+  margin-bottom: 6px;
+}
+.chk {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--dim);
+  line-height: 1.45;
+}
+.chk input {
+  margin-top: 2px;
+  accent-color: #f4772a;
+}
+</style>

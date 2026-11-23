@@ -94,33 +94,66 @@ export function gradientColorAt(gradient: Gradient, t: number): [number, number,
 }
 
 const tmpColor = new Color()
-/** 线性空间的 RGB LUT（three 渲染用） */
+/** 线性空间的 RGBA LUT（three 渲染用），A 来自色标的可选 a 字段 */
 export function buildGradientLUT(gradient: Gradient, size = 64): Float32Array {
-  const out = new Float32Array(size * 3)
+  const out = new Float32Array(size * 4)
   for (let i = 0; i < size; i++) {
     const t = size === 1 ? 0 : i / (size - 1)
     const [r, g, b] = gradientColorAt(gradient, t)
     tmpColor.setRGB(r, g, b, 'srgb')
-    out[i * 3] = tmpColor.r
-    out[i * 3 + 1] = tmpColor.g
-    out[i * 3 + 2] = tmpColor.b
+    out[i * 4] = tmpColor.r
+    out[i * 4 + 1] = tmpColor.g
+    out[i * 4 + 2] = tmpColor.b
+    out[i * 4 + 3] = gradientAlphaAt(gradient, t)
   }
   return out
 }
 
+/** 生命内透明度（色标 a 字段线性插值，缺省 1） */
+export function gradientAlphaAt(gradient: Gradient, t: number): number {
+  const stops = [...(gradient?.stops?.length ? gradient.stops : [{ t: 0, color: '#ffffff' }])].sort(
+    (a, b) => a.t - b.t
+  )
+  const av = (s: { a?: number }) => (typeof s.a === 'number' ? clamp(s.a, 0, 1) : 1)
+  t = clamp(t, 0, 1)
+  if (t <= stops[0].t) return av(stops[0])
+  const last = stops[stops.length - 1]
+  if (t >= last.t) return av(last)
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i]
+    const b = stops[i + 1]
+    if (t >= a.t && t <= b.t) {
+      const span = Math.max(1e-6, b.t - a.t)
+      return lerp(av(a), av(b), (t - a.t) / span)
+    }
+  }
+  return av(last)
+}
+
 export function gradientToCSS(gradient: Gradient): string {
   const stops = [...gradient.stops].sort((a, b) => a.t - b.t)
-  const body = stops.map((s) => `${s.color} ${(s.t * 100).toFixed(1)}%`).join(', ')
+  const body = stops
+    .map((s) => {
+      const h = s.color.replace('#', '')
+      const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
+      const r = parseInt(full.slice(0, 2), 16) || 0
+      const g = parseInt(full.slice(2, 4), 16) || 0
+      const b = parseInt(full.slice(4, 6), 16) || 0
+      const a = typeof s.a === 'number' ? clamp(s.a, 0, 1) : 1
+      return `rgba(${r}, ${g}, ${b}, ${a.toFixed(3)}) ${(s.t * 100).toFixed(1)}%`
+    })
+    .join(', ')
   return `linear-gradient(90deg, ${body})`
 }
 
-/** 将色标采样成 rgba 字符串（Godot 导出用） */
+/** 将色标采样成 rgba（Godot 导出用），a = 色标透明度 × alphaFn(生命周期) */
 export function gradientSamples(gradient: Gradient, count = 16, alphaFn?: (t: number) => number) {
   const out: Array<{ t: number; r: number; g: number; b: number; a: number }> = []
   for (let i = 0; i < count; i++) {
     const t = i / (count - 1)
     const [r, g, b] = gradientColorAt(gradient, t)
-    out.push({ t, r: r / 255, g: g / 255, b: b / 255, a: alphaFn ? alphaFn(t) : 1 })
+    const a = gradientAlphaAt(gradient, t) * (alphaFn ? alphaFn(t) : 1)
+    out.push({ t, r, g, b, a: clamp(a, 0, 1) })
   }
   return out
 }

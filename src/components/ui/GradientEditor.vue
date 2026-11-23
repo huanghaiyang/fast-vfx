@@ -18,12 +18,24 @@
       <NumberField :model-value="selected.t" :min="0" :max="1" :step="0.01" @begin="$emit('begin')" @update:model-value="setT" />
       <button class="icon danger" title="删除色标" @click="remove(sel)" :disabled="modelValue.stops.length <= 2">✕</button>
     </div>
+    <div class="edit alpha">
+      <SliderRow
+        label="色标透明度"
+        :model-value="selected.a ?? 1"
+        :min="0"
+        :max="1"
+        :step="0.01"
+        @begin="$emit('begin')"
+        @update:model-value="setA"
+      />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import NumberField from './NumberField.vue'
+import SliderRow from './SliderRow.vue'
 import type { Gradient } from '../../core/types'
 import { gradientColorAt, gradientToCSS, rgbToHex } from '../../core/curve'
 
@@ -94,6 +106,11 @@ function setT(v: number) {
   emit('update:modelValue', { stops: [...props.modelValue.stops] })
 }
 
+function setA(v: number) {
+  props.modelValue.stops[sel.value].a = Math.min(1, Math.max(0, Number(v.toFixed(2))))
+  emit('update:modelValue', { stops: [...props.modelValue.stops] })
+}
+
 function remove(i: number) {
   if (props.modelValue.stops.length <= 2) return
   emit('begin')
@@ -142,5 +159,13 @@ function remove(i: number) {
   grid-template-columns: 44px 1fr 28px;
   gap: 6px;
   align-items: center;
+}
+.edit.alpha {
+  display: block;
+  margin-top: 5px;
+}
+.edit.alpha .al {
+  font-size: 10.5px;
+  color: var(--dim-2);
 }
 </style>

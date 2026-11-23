@@ -1,6 +1,6 @@
 import { reactive, watch } from 'vue'
 import type { EffectDoc, FXObject, Keyframe, Track, TrackProperty, Vec3 } from './types'
-import { BASE_TEXTURES, cloneDoc, createImportedModel, createModel, createParticle, emptyDoc, mergeTrack } from './doc'
+import { BASE_TEXTURES, cloneDoc, createImportedModel, createModel, createParticle, emptyDoc, mergeTrack, normalizeDoc } from './doc'
 import { PRESETS } from './presets'
 import { sampleTrack } from './curve'
 import type { FXEngine, GizmoMode } from './engine'
@@ -34,6 +34,10 @@ let engineRef: FXEngine | null = null
 export function registerEngine(e: FXEngine | null) {
   engineRef = e
   ;(globalThis as any).__fastvfx_engine = e
+}
+
+export function getEngine() {
+  return engineRef
 }
 
 export function captureCameraQuiet() {
@@ -519,7 +523,7 @@ export async function importProject(file: File) {
     pushHistory()
     doc.textures = mergeTextures(doc)
     if (!doc.modelAssets) doc.modelAssets = []
-    S.doc = doc
+    S.doc = normalizeDoc(doc)
     S.selectedId = null
     S.keySel = []
     S.time = 0
@@ -561,7 +565,7 @@ export function restoreAutosave() {
     if (!Array.isArray(doc.objects) || !doc.objects.length) return false
     doc.textures = mergeTextures(doc)
     if (!doc.modelAssets) doc.modelAssets = []
-    S.doc = doc
+    S.doc = normalizeDoc(doc)
     S.time = 0
     S.version++
     void hydrateModelAssets()

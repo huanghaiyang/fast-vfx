@@ -32,3 +32,5 @@ export-tmp/
 
 # 本地 dev server 日志
 .dev-server.log
+tmp-capture-*/
+.build.log

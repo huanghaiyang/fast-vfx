@@ -84,7 +84,13 @@ export class FXEngine {
     this.state = state
     this.cb = cb
 
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
+    this.renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      powerPreference: 'high-performance',
+      // 成片输出要直接读画布（PNG / captureStream），必须保留绘制缓冲
+      preserveDrawingBuffer: true
+    })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 0.95
@@ -294,6 +300,15 @@ export class FXEngine {
     if (obj.kind === 'particles' && rt.particle) {
       rt.particle.doc = obj
       rt.particle.applySettings(doc.textures)
+      // 子发射接线：父粒子消亡/触地 → 目标对象的 spawnBurst
+      rt.particle.onSpawn = (x, y, z, vx, vy, vz, at, spread) => {
+        const sub = obj.sub
+        if (!sub?.enabled || !sub.targetId) return
+        const target = this.runtimes.get(sub.targetId)?.particle
+        if (!target || target === rt.particle) return
+        const count = Math.max(1, Math.round(sub.count))
+        target.spawnBurst(x, y, z, vx, vy, vz, count, spread, at)
+      }
       this.dirty = true
       return
     }
@@ -505,12 +520,37 @@ export class FXEngine {
     for (const rt of this.runtimes.values()) rt.particle?.reset()
   }
 
+  /** 录制/成片前清空所有发射器，让画面从 0 秒重新长出来 */
+  resetEmittersPublic() {
+    this.resetEmitters()
+    this.lastSeek = -999
+    this.appliedTime = -1
+  }
+
   seek(time: number) {
     this.lastSeek = time
     this.appliedTime = time
-    for (const rt of this.runtimes.values()) rt.particle?.seekTo(time)
+    // 先全体 reset、清空注入队列，再统一按顺序快进：子发射在快进过程中才能落到干净的接收方
+    for (const rt of this.runtimes.values()) {
+      rt.particle?.clearInject()
+      rt.particle?.reset()
+    }
+    for (const rt of this.runtimes.values()) rt.particle?.seekTo(time, true)
     this.applyTransforms(time)
     this.dirty = false
+  }
+
+  /** 成片输出用：渲染指定时间点的画面（不推进时间轴状态） */
+  renderFrame(time: number) {
+    this.seek(time)
+    this.applyTransforms(time)
+    this.controls.update()
+    if (this.state.doc.bloom) this.composer.render()
+    else this.renderer.render(this.scene, this.camera)
+  }
+
+  get viewCanvas(): HTMLCanvasElement {
+    return this.canvas
   }
 
   private loop() {

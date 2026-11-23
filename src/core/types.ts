@@ -13,6 +13,7 @@ export interface Curve {
 export interface ColorStop {
   t: number // 0..1
   color: string // #rrggbb
+  a?: number // 0..1，生命内透明度（缺省 1）
 }
 
 export interface Gradient {
@@ -66,6 +67,16 @@ export interface SpinSettings {
   stretch: number // 沿速度方向拉长倍率
 }
 
+/** 子发射：本发射器的粒子消亡 / 触地时，向另一个发射器注入粒子 */
+export interface SubEmitSettings {
+  enabled: boolean
+  targetId: string // 目标粒子对象 id
+  trigger: 'death' | 'ground' // 寿命结束 / 触地
+  count: number // 每次触发注入的粒子数
+  inherit: number // 0..1，继承父粒子的速度比例
+  spread: number // 度，注入方向的随机扩散
+}
+
 export interface ParticleRenderSettings {
   textureId: string
   blend: BlendMode
@@ -89,10 +100,15 @@ export interface ParticleDoc {
   /** 簇散布半径（米） */
   clusterRadius: number
   sizeCurve: Curve
+  /** 生命内速度倍率曲线（1 = 原速） */
+  speedCurve: Curve
+  /** 生命内自旋倍率曲线（1 = 原角速度） */
+  spinCurve: Curve
   gradient: Gradient
   brightness: number
   spin: SpinSettings
   render: ParticleRenderSettings
+  sub: SubEmitSettings
 }
 
 export type GeoKind =

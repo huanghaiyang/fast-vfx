@@ -6,6 +6,12 @@ import { getCanvas, getTexture } from './textures'
 import { instantiateModel } from './assets'
 import { DOUBLE_SIDED_KINDS, godotPrimitive, buildGeometry } from './geometry'
 import { gradientSamples } from './curve'
+
+/** 判断曲线是否真的偏离常量 1（偏离才需要在导出提示里点名） */
+function hasCurveOffset(curve?: { points: Array<{ t: number; v: number }> }): boolean {
+  if (!curve?.points?.length) return false
+  return curve.points.some((p) => Math.abs(p.v - 1) > 0.02)
+}
 import { GODOT_RUNTIME_GD } from './godotRuntime'
 
 const DEG = Math.PI / 180
@@ -310,6 +316,24 @@ export async function buildGodotPackage(doc: EffectDoc): Promise<GodotPackage> {
 
   if (doc.tracks.some((t) => t.property === 'opacity')) {
     warnings.push('透明度动画在 Godot 中映射为 GeometryInstance3D.transparency（仅网格对象生效）')
+  }
+
+  // 本轮新增能力在 Godot 侧的落差
+  const curved = doc.objects.filter((o): o is ParticleDoc => o.kind === 'particles' && hasCurveOffset(o.speedCurve))
+  if (curved.length) {
+    warnings.push(`「${curved.map((o) => o.name).join('、')}」使用了生命内速度倍率曲线，Godot 侧只导出静态速度（曲线仅编辑器内生效）`)
+  }
+  const spun = doc.objects.filter((o): o is ParticleDoc => o.kind === 'particles' && hasCurveOffset(o.spinCurve))
+  if (spun.length) {
+    warnings.push(`「${spun.map((o) => o.name).join('、')}」使用了生命内自旋倍率曲线，Godot 侧角速度按静态值导出`)
+  }
+  const subs = doc.objects.filter(
+    (o): o is ParticleDoc => o.kind === 'particles' && !!o.sub?.enabled && !!o.sub.targetId
+  )
+  if (subs.length) {
+    warnings.push(
+      `「${subs.map((o) => o.name).join('、')}」配置了子发射，Godot 运行时脚本暂不支持跨发射器注入，需用 GPUParticles3D + sub_emitter 自行接`
+    )
   }
 
   const glb = await buildGlb(doc, names, new Map())
