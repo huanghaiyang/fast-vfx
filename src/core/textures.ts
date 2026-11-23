@@ -8,7 +8,7 @@ function vr(variant: number, k: number): number {
 }
 
 /** 变形 0 = 原版 */
-export const VARIANT_COUNT = 20
+export const VARIANT_COUNT = 24
 
 /* ---------------- 噪声工具 ---------------- */
 function hash2(x: number, y: number, seed: number): number {
@@ -503,6 +503,328 @@ export const GENERATORS: GenDef[] = [
       ctx.lineTo(0, s * hgt * 0.92)
       ctx.stroke()
       ctx.restore()
+    }
+  },
+  {
+    id: 'flash',
+    name: '爆闪',
+    draw: (ctx, size, p) => {
+      const vi = p.variant ?? 0
+      const arms = vi ? 3 + Math.floor(vr(vi, 1) * 5) : 4
+      const rot = vi ? vr(vi, 2) * 0.9 : 0
+      const coreR = vi ? 0.1 + vr(vi, 3) * 0.12 : 0.15
+      const rayLen = vi ? 0.62 + vr(vi, 4) * 0.5 : 1
+      const ax = vi ? 0.92 + vr(vi, 5) * 0.3 : 1
+      const ay = vi ? 0.92 + vr(vi, 6) * 0.3 : 1
+      pixelAlpha(ctx, size, (u, v) => {
+        const dx = ((u - 0.5) * 2) / ax
+        const dy = ((v - 0.5) * 2) / ay
+        const r = Math.hypot(dx, dy)
+        if (r > 1.2) return 0
+        const core = Math.pow(Math.max(0, 1 - r / (coreR * 2.6)), 3.2)
+        const ang = Math.atan2(dy, dx) + rot
+        // 放射芒：cos(arms·θ) 的高次幂，形成 2·arms 根细尖
+        const ray = Math.pow(Math.max(0, Math.cos(ang * arms)), 5) * Math.pow(Math.max(0, 1 - r / rayLen), 2.2)
+        const halo = Math.pow(Math.max(0, 1 - r), 2.8) * 0.42
+        return Math.min(1.5, core * 1.5 + ray * 1.2 + halo)
+      })
+    }
+  },
+  {
+    id: 'beam',
+    name: '光束',
+    draw: (ctx, size, p) => {
+      const seed = p.seed
+      const vi = p.variant ?? 0
+      const width = vi ? 0.055 + vr(vi, 1) * 0.12 : 0.12
+      const stripes = vi ? 4 + Math.floor(vr(vi, 2) * 10) : 8
+      const lean = vi ? (vr(vi, 3) - 0.5) * 0.26 : 0
+      const waist = vi ? 0.25 + vr(vi, 4) * 0.5 : 0.5
+      const twin = vi ? vr(vi, 5) > 0.45 : false
+      const wobK = vi ? 0.02 + vr(vi, 6) * 0.05 : 0.04
+      const body = (uu: number, env: number) => {
+        const g = Math.exp(-Math.pow((uu - 0.5) / (width * (0.5 + env * 0.9)), 2) * 1.7)
+        if (g < 0.004) return 0
+        const st = 0.5 + 0.5 * Math.sin((uu - 0.5) * stripes * 44 + fbm(uu * 4, 0.3, seed + 13, 3) * 6.28)
+        return g * (0.72 + st * 0.5) * env + Math.pow(g, 2.6) * 0.75
+      }
+      pixelAlpha(ctx, size, (u, v) => {
+        const yy = 1 - v
+        const wob = (fbm(v * 2.6, seed * 0.3, seed + 7, 3) - 0.5) * wobK * 2 + lean * (yy - 0.5)
+        const uu = u + wob
+        // 纵向包络：两端收成尖，腰部可鼓
+        const env = Math.pow(Math.sin(Math.min(1, Math.max(0, yy)) * Math.PI), 1 - waist * 0.6)
+        let a = body(uu, env)
+        if (twin) a += body(uu + 0.26, env) * 0.55
+        return a
+      })
+    }
+  },
+  {
+    id: 'spiral',
+    name: '漩涡',
+    draw: (ctx, size, p) => {
+      const vi = p.variant ?? 0
+      const arms = vi ? 2 + (vi % 3) : 3
+      const turns = vi ? 1.1 + vr(vi, 1) * 1.7 : 1.8
+      const dir = vi && vr(vi, 2) > 0.5 ? -1 : 1
+      const thick = vi ? 0.012 + vr(vi, 3) * 0.026 : 0.03
+      const spin = vi ? vr(vi, 4) * Math.PI * 2 : 0
+      const soft = 1.2 + p.softness
+      pixelAlpha(ctx, size, (u, v) => {
+        const dx = u - 0.5
+        const dy = v - 0.5
+        const r = Math.hypot(dx, dy) * 2 // 0..1（贴边）
+        if (r < 0.02 || r > 1) return 0
+        const th = Math.atan2(dy, dx)
+        let best = 0
+        for (let a = 0; a < arms; a++) {
+          // 阿基米德螺线：期望角随半径线性增长
+          const base = (a / arms) * Math.PI * 2 + spin
+          const expect = base + dir * r * turns * Math.PI * 2
+          let dAng = th - expect
+          dAng = Math.atan2(Math.sin(dAng), Math.cos(dAng))
+          const arc = Math.abs(dAng) * r * 0.5 // 换算成贴图坐标的弧长
+          const w = thick * (1 - r * 0.55 + 0.12)
+          const k = Math.exp(-Math.pow(arc / w, 2) * soft)
+          if (k > best) best = k
+        }
+        const fade = Math.pow(Math.max(0, 1 - r), 0.75) * Math.pow(Math.min(1, r * 6), 0.6)
+        const hub = Math.pow(Math.max(0, 1 - r / 0.22), 2.6) * 0.7
+        return Math.min(1.2, best * fade * 1.15 + hub)
+      })
+    }
+  },
+  {
+    id: 'bubble',
+    name: '气泡',
+    draw: (ctx, size, p) => {
+      const vi = p.variant ?? 0
+      // 半径以画布坐标（0.5 = 边）为单位
+      const R = vi ? 0.2 + vr(vi, 1) * 0.13 : 0.29
+      const w = vi ? 0.008 + vr(vi, 2) * 0.02 : 0.016
+      const hx = R * (vi ? -0.4 - vr(vi, 3) * 0.2 : -0.5)
+      const hy = R * (vi ? -0.45 - vr(vi, 4) * 0.2 : -0.55)
+      const innerK = vi ? vr(vi, 5) * 0.5 : 0.18
+      const second = vi ? vr(vi, 6) : 0.5
+      const ax = vi ? 0.9 + vr(vi, 7) * 0.2 : 1
+      pixelAlpha(ctx, size, (u, v) => {
+        const dx = (u - 0.5) / ax
+        const dy = v - 0.5
+        const r = Math.hypot(dx, dy)
+        // 空心环：膜边亮、内部几乎透明，才有「泡」的读感
+        const ring = Math.exp(-Math.pow((r - R) / w, 2) * 1.6)
+        const skin = Math.max(0, 1 - Math.abs(r - R) / (w * 4.2)) * innerK
+        const hiA = Math.exp(-(Math.pow((dx - hx) * 13, 2) + Math.pow((dy - hy) * 15, 2)))
+        const hiB = Math.exp(-(Math.pow((dx + hx * 0.6) * 26, 2) + Math.pow((dy + hy * 0.55) * 30, 2))) * 0.5
+        let a = Math.min(1.25, ring * 1.18 + skin * 0.55 + (hiA + hiB) * 1.0)
+        if (second > 0.2) {
+          const sd = Math.hypot(dx - R * 0.82, dy - R * 0.86)
+          const sR = R * 0.24
+          a = Math.max(a, Math.exp(-Math.pow((sd - sR) / (w * 0.8), 2) * 1.6) * 0.95)
+        }
+        return a
+      })
+    }
+  },
+  {
+    id: 'dust',
+    name: '尘粒',
+    draw: (ctx, size, p) => {
+      const s = size
+      const vi = p.variant ?? 0
+      const count = vi ? 50 + Math.floor(vr(vi, 1) * 120) : 80
+      const rMin = vi ? 0.004 + vr(vi, 2) * 0.008 : 0.006
+      const rMax = vi ? 0.014 + vr(vi, 3) * 0.03 : 0.022
+      const bias = vi ? 0.25 + vr(vi, 4) * 0.9 : 0.6
+      const spreadR = vi ? 0.28 + vr(vi, 5) * 0.22 : 0.4
+      const seed = p.seed
+      // 底噪：让颗粒落在稀薄的尘雾里，不是纯撒点
+      pixelAlpha(ctx, size, (u, v) => {
+        const r = Math.hypot(u - 0.5, v - 0.5) * 2
+        const cl = fbm(u * 3.6 + seed, v * 3.6, seed + 5, 3)
+        const mask = Math.max(0, 1 - r / (0.62 + cl * 0.4))
+        return Math.pow(cl, 2.4) * mask * 0.32
+      })
+      ctx.globalCompositeOperation = 'lighter'
+      for (let i = 0; i < count; i++) {
+        const a = hash2(i, 1, seed) * Math.PI * 2
+        const rr = Math.pow(hash2(i, 2, seed), 0.55 + bias * 0.4) * spreadR
+        const x = (0.5 + Math.cos(a) * rr * 1.0) * s
+        const y = (0.5 + Math.sin(a) * rr * 1.0) * s
+        const rad = (rMin + hash2(i, 3, seed) * (rMax - rMin)) * s
+        const al = 0.35 + hash2(i, 4, seed) * 0.6
+        const g = ctx.createRadialGradient(x, y, 0, x, y, rad * 3.2)
+        g.addColorStop(0, `rgba(255,255,255,${al})`)
+        g.addColorStop(0.4, `rgba(255,255,255,${al * 0.5})`)
+        g.addColorStop(1, 'rgba(255,255,255,0)')
+        ctx.fillStyle = g
+        ctx.beginPath()
+        ctx.arc(x, y, rad * 3.2, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      ctx.globalCompositeOperation = 'source-over'
+    }
+  },
+  {
+    id: 'slash',
+    name: '刀光',
+    draw: (ctx, size, p) => {
+      const vi = p.variant ?? 0
+      const span = vi ? 0.5 + vr(vi, 1) * 1.3 : 1.05 // 弧度半张角
+      const tilt = vi ? (vr(vi, 2) - 0.5) * 1.2 : -0.5
+      // 半径以「半个画布」为单位：0.3 左右，弧带才落在画面内
+      const R = vi ? 0.26 + vr(vi, 3) * 0.1 : 0.3
+      const thick = vi ? 0.02 + vr(vi, 4) * 0.05 : 0.045
+      const offset = vi ? 0.05 + vr(vi, 5) * 0.05 : 0.07
+      const sharp = vi ? 0.6 + vr(vi, 6) : 1
+      pixelAlpha(ctx, size, (u, v) => {
+        const dx = u - 0.5
+        const dy = v - 0.5
+        const r = Math.hypot(dx, dy)
+        let th = Math.atan2(dy, dx) - tilt
+        th = Math.atan2(Math.sin(th), Math.cos(th))
+        if (Math.abs(th) > span) return 0
+        const t = Math.abs(th) / span // 0 = 弧中点，1 = 两端
+        // 弧带：半径随角度外扩，两端渐细
+        const center = R * (0.94 + t * 0.1)
+        const w = thick * Math.pow(1 - t, 0.75 * sharp) + 0.008
+        const band = Math.exp(-Math.pow((r - center) / w, 2) * 1.4)
+        // 内侧亮边（刀锋）
+        const edge = Math.exp(-Math.pow((r - center + offset * 0.5) / (w * 0.34), 2) * 2)
+        return Math.min(1.3, band * 0.95 + edge * 0.6)
+      })
+    }
+  },
+  {
+    id: 'cell',
+    name: '能量网',
+    draw: (ctx, size, p) => {
+      const s = size
+      const cx = s / 2
+      const vi = p.variant ?? 0
+      const n = vi ? 2 + Math.floor(vr(vi, 1) * 4) : 3 // 半径方向上的格数
+      const rot = vi ? vr(vi, 2) * Math.PI / 3 : 0
+      const lwid = vi ? 0.005 + vr(vi, 3) * 0.012 : 0.011
+      const gap = vi ? vr(vi, 4) * 0.65 : 0.32 // 断线概率
+      const dotK = vi ? 0.2 + vr(vi, 5) * 0.6 : 0.45
+      const seed = p.seed
+      const R = s * 0.47
+      const a = (s * 0.44) / (n + 0.6) // 六边形外接半径
+      const stepX = a * 1.5
+      const stepY = a * Math.sqrt(3)
+
+      ctx.save()
+      ctx.translate(cx, cx)
+      ctx.rotate(rot)
+      // 底下垫一层中心亮、边缘暗的辉光，网格才有「能量」感
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, R)
+      g.addColorStop(0, 'rgba(255,255,255,0.16)')
+      g.addColorStop(0.5, 'rgba(255,255,255,0.06)')
+      g.addColorStop(1, 'rgba(255,255,255,0)')
+      ctx.fillStyle = g
+      ctx.beginPath()
+      ctx.arc(0, 0, R, 0, Math.PI * 2)
+      ctx.fill()
+
+      ctx.strokeStyle = '#ffffff'
+      ctx.lineWidth = lwid * s
+      ctx.shadowColor = 'rgba(255,255,255,0.75)'
+      ctx.shadowBlur = s * 0.03
+      ctx.lineCap = 'round'
+
+      for (let row = -n; row <= n; row++) {
+        for (let col = -n; col <= n; col++) {
+          const x = col * stepX
+          const y = row * stepY + (col % 2 ? stepY / 2 : 0)
+          const d = Math.hypot(x, y)
+          if (d > R - a * 0.5) continue
+          const fade = Math.pow(Math.max(0, 1 - d / R), 0.6)
+          for (let e = 0; e < 6; e++) {
+            if (hash2(col * 11 + e, row * 17, seed) < gap) continue
+            const a0 = (Math.PI / 3) * e
+            const a1 = (Math.PI / 3) * (e + 1)
+            ctx.globalAlpha = 0.9 * fade
+            ctx.beginPath()
+            ctx.moveTo(x + Math.cos(a0) * a, y + Math.sin(a0) * a)
+            ctx.lineTo(x + Math.cos(a1) * a, y + Math.sin(a1) * a)
+            ctx.stroke()
+          }
+          // 节点光点：不是每格都点，避免变成蜂窝板
+          if (dotK > 0.3 && hash2(col * 3, row * 5, seed + 7) > 0.55) {
+            ctx.globalAlpha = 0.55 * fade * dotK
+            for (let e = 0; e < 6; e += 2) {
+              const ang = (Math.PI / 3) * e
+              ctx.beginPath()
+              ctx.arc(x + Math.cos(ang) * a, y + Math.sin(ang) * a, lwid * s * 2.2, 0, Math.PI * 2)
+              ctx.fillStyle = 'rgba(255,255,255,0.9)'
+              ctx.fill()
+            }
+          }
+        }
+      }
+      ctx.globalAlpha = 1
+      ctx.shadowBlur = 0
+      ctx.restore()
+    }
+  },
+  {
+    id: 'rune',
+    name: '符印',
+    draw: (ctx, size, p) => {
+      const s = size
+      const cx = s / 2
+      const vi = p.variant ?? 0
+      const rot = vi ? vr(vi, 1) * Math.PI * 2 : 0
+      const shape = vi ? Math.floor(vr(vi, 2) * 4) : 0 // 0 圆 1 六边 2 三角 3 方
+      const strokes = vi ? 2 + Math.floor(vr(vi, 3) * 5) : 4
+      const thick = vi ? 0.006 + vr(vi, 4) * 0.016 : 0.014
+      const glowK = vi ? 0.2 + vr(vi, 5) * 0.6 : 0.45
+      // 底光
+      const g = ctx.createRadialGradient(cx, cx, 0, cx, cx, s * 0.42)
+      g.addColorStop(0, `rgba(255,255,255,${0.28 * glowK + 0.08})`)
+      g.addColorStop(0.55, `rgba(255,255,255,${0.07 * glowK})`)
+      g.addColorStop(1, 'rgba(255,255,255,0)')
+      ctx.fillStyle = g
+      ctx.fillRect(0, 0, s, s)
+
+      ctx.save()
+      ctx.translate(cx, cx)
+      ctx.rotate(rot)
+      ctx.strokeStyle = 'rgba(255,255,255,0.95)'
+      ctx.shadowColor = 'rgba(255,255,255,0.8)'
+      ctx.shadowBlur = s * 0.05 * (0.5 + glowK)
+      ctx.lineJoin = 'round'
+      // 外轮廓
+      ctx.lineWidth = thick * 1.6 * s
+      ctx.beginPath()
+      const R = s * 0.3
+      if (shape === 0) ctx.arc(0, 0, R, 0, Math.PI * 2)
+      else {
+        const sides = shape === 1 ? 6 : shape === 2 ? 3 : 4
+        for (let i = 0; i <= sides; i++) {
+          const ang = (i / sides) * Math.PI * 2 - Math.PI / 2
+          const x = Math.cos(ang) * R
+          const y = Math.sin(ang) * R
+          if (i === 0) ctx.moveTo(x, y)
+          else ctx.lineTo(x, y)
+        }
+      }
+      ctx.stroke()
+      // 内部笔画：从端点连到随机方向，形成抽象符文
+      ctx.lineWidth = thick * s
+      for (let i = 0; i < strokes; i++) {
+        const a0 = hash2(i, 1, p.seed) * Math.PI * 2
+        const a1 = hash2(i, 2, p.seed) * Math.PI * 2
+        const r0 = (0.3 + hash2(i, 3, p.seed) * 0.55) * R
+        const r1 = (0.15 + hash2(i, 4, p.seed) * 0.7) * R
+        ctx.beginPath()
+        ctx.moveTo(Math.cos(a0) * r0, Math.sin(a0) * r0)
+        ctx.lineTo(Math.cos(a1) * r1, Math.sin(a1) * r1)
+        ctx.stroke()
+      }
+      ctx.restore()
+      ctx.shadowBlur = 0
     }
   }
 ]

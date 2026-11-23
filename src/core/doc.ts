@@ -178,7 +178,15 @@ export const BASE_TEXTURES: TextureAsset[] = [
   tex('tex_shard', '碎片', 'shard'),
   tex('tex_bolt', '电弧', 'bolt', { seed: 11 }),
   tex('tex_dot', '圆点', 'dot'),
-  tex('tex_leaf', '叶形', 'leaf')
+  tex('tex_leaf', '叶形', 'leaf'),
+  tex('tex_flash', '爆闪', 'flash'),
+  tex('tex_beam', '光束', 'beam', { seed: 13 }),
+  tex('tex_spiral', '漩涡', 'spiral', { seed: 15 }),
+  tex('tex_bubble', '气泡', 'bubble'),
+  tex('tex_dust', '尘粒', 'dust', { seed: 21 }),
+  tex('tex_slash', '刀光', 'slash'),
+  tex('tex_cell', '能量网', 'cell', { seed: 19 }),
+  tex('tex_rune', '符印', 'rune', { seed: 23 })
 ]
 
 export function emptyDoc(name = '新特效'): EffectDoc {
