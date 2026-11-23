@@ -89,38 +89,31 @@
 
     <Section v-if="cmp" title="帧间比对">
       <div class="kf-diff" v-if="cmp">
+        <div class="cmp-head">
+          <span class="ca">A · {{ keys[0]?.t.toFixed(2) }}s</span>
+          <span class="cl">变化项</span>
+          <span class="cb">B · {{ keys[1]?.t.toFixed(2) }}s</span>
+        </div>
+
+        <div class="cmp-rows">
+          <div class="cmp-row" v-for="r in diffRows" :key="r.k">
+            <span class="cv mono ca-v">{{ r.a }}</span>
+            <span class="cl">
+              {{ r.label }}
+              <em class="d mono" :class="r.up ? 'up' : 'down'">{{ r.d }}</em>
+            </span>
+            <span class="cv mono cb-v">{{ r.b }}</span>
+          </div>
+        <div class="cmp-none" v-if="!diffRows.length">两帧数值完全一致（只有时间不同）</div>
+        </div>
+
         <div class="drow">
           <span class="dl">时间间隔 Δt</span>
           <span class="dv mono">{{ cmp.dt.toFixed(3) }} s</span>
         </div>
-        <div class="drow" v-if="!cmp.vec">
-          <span class="dl">数值变化 Δ</span>
-          <span class="dv mono" :class="signCls(cmp.d as number)">{{ signed(cmp.d as number) }}</span>
-        </div>
-        <div class="drow" v-if="!cmp.vec && cmp.ratio !== null">
-          <span class="dl">相对变化</span>
-          <span class="dv mono" :class="signCls(cmp.ratio as number)">{{ signed(cmp.ratio as number) }} %</span>
-        </div>
-        <div class="drow" v-if="!cmp.vec">
-          <span class="dl">变化速率</span>
-          <span class="dv mono">{{ (cmp.rate as number).toFixed(3) }} /s</span>
-        </div>
-
-        <div class="drow" v-if="cmp.vec">
-          <span class="dl">位移距离</span>
-          <span class="dv mono">{{ (cmp.dist as number).toFixed(3) }} m</span>
-        </div>
-        <div class="drow" v-if="cmp.vec">
-          <span class="dl">平均速度</span>
-          <span class="dv mono accent">{{ (cmp.speed as number).toFixed(3) }} m/s</span>
-        </div>
-
-        <div class="dgrid" v-if="cmp.vec">
-          <div class="dcell" v-for="(ax, i) in ['x', 'y', 'z']" :key="ax">
-            <span class="ax" :class="ax">{{ ax }}</span>
-            <span class="mono" :class="signCls((cmp.d as number[])[i])">{{ signed((cmp.d as number[])[i]) }}</span>
-            <span class="sub mono">{{ ((cmp.axisSpeed as number[])[i]).toFixed(2) }}/s</span>
-          </div>
+        <div class="drow" v-if="moveDist !== null">
+          <span class="dl">位移距离 / 平均速度</span>
+          <span class="dv mono accent">{{ moveDist.toFixed(3) }} m · {{ moveSpeed.toFixed(3) }} m/s</span>
         </div>
 
         <div class="notch" v-if="!adjacent">注意：这两帧中间还隔着 {{ gap - 1 }} 帧，比对的是整段跨度</div>
@@ -184,35 +177,68 @@ const adjacent = computed(() => gap.value === 1)
 const cmp = computed(() => {
   if (keys.value.length < 2) return null
   const [a, b] = keys.value
-  const dt = b.t - a.t
-  if (Array.isArray(a.v) && Array.isArray(b.v)) {
-    const d = [b.v[0] - a.v[0], b.v[1] - a.v[1], b.v[2] - a.v[2]]
-    const dist = Math.hypot(d[0], d[1], d[2])
-    return {
-      vec: true as const,
-      dt,
-      dist,
-      d: d as number[],
-      speed: dt > 1e-6 ? dist / dt : 0,
-      axisSpeed: d.map((x) => (dt > 1e-6 ? x / dt : 0)) as number[],
-      rate: 0,
-      ratio: null as number | null
+  return { dt: b.t - a.t }
+})
+
+/** 左右两栏逐项对照：该对象所有轨道分别在 A / B 时刻采样，只留真正变化的项 */
+const diffRows = computed(() => {
+  const o = obj.value
+  const [a, b] = keys.value
+  if (!o || !b) return [] as Array<{ k: string; label: string; a: string; b: string; d: string; up: boolean }>
+  const rows: Array<{ k: string; label: string; a: string; b: string; d: string; up: boolean }> = []
+  const AX: Array<'x' | 'y' | 'z'> = ['x', 'y', 'z']
+  for (const tr of S.doc.tracks) {
+    if (tr.targetId !== o.id || !tr.keys.length) continue
+    const va = sampleTrack(tr, a.t)
+    const vb = sampleTrack(tr, b.t)
+    if (va === null || vb === null) continue
+    if (Array.isArray(va) && Array.isArray(vb)) {
+      for (let i = 0; i < 3; i++) {
+        const dv = vb[i] - va[i]
+        if (Math.abs(dv) < 1e-4) continue
+        rows.push({
+          k: `${tr.id}_${AX[i]}`,
+          label: `${PROP[tr.property]} · ${AX[i]}`,
+          a: va[i].toFixed(3),
+          b: vb[i].toFixed(3),
+          d: signed(dv),
+          up: dv > 0
+        })
+      }
+    } else if (typeof va === 'number' && typeof vb === 'number') {
+      const dv = vb - va
+      if (Math.abs(dv) < 1e-4) continue
+      const pct = Math.abs(va) > 1e-6 ? ` (${signed(dv / Math.abs(va) * 100)}%)` : ''
+      rows.push({
+        k: tr.id,
+        label: PROP[tr.property],
+        a: va.toFixed(3),
+        b: vb.toFixed(3),
+        d: signed(dv) + pct,
+        up: dv > 0
+      })
     }
   }
-  const va = a.v as number
-  const vb = b.v as number
-  const d = vb - va
-  return {
-    vec: false as const,
-    dt,
-    dist: 0,
-    d,
-    speed: 0,
-    axisSpeed: [],
-    rate: dt > 1e-6 ? d / dt : 0,
-    ratio: va !== 0 ? (vb / va - 1) * 100 : null
-  }
+  return rows
 })
+
+/** 位置轨位移距离与平均速度（没有位置轨就是 null） */
+const moveDist = computed(() => moveInfo.value?.dist ?? null)
+const moveSpeed = computed(() => moveInfo.value?.speed ?? 0)
+const moveInfo = computed(() => {
+  const o = obj.value
+  const [a, b] = keys.value
+  if (!o || !b) return null
+  const tr = S.doc.tracks.find((t) => t.targetId === o.id && t.property === 'position' && t.keys.length)
+  if (!tr) return null
+  const va = sampleTrack(tr, a.t)
+  const vb = sampleTrack(tr, b.t)
+  if (!Array.isArray(va) || !Array.isArray(vb)) return null
+  const dist = Math.hypot(vb[0] - va[0], vb[1] - va[1], vb[2] - va[2])
+  const dt = b.t - a.t
+  return { dist, speed: dt > 1e-6 ? dist / dt : 0 }
+})
+
 
 function isVec(k: Keyframe) {
   return Array.isArray(k.v)
@@ -460,6 +486,81 @@ function removeKey(k: Keyframe) {
   gap: 8px;
   font-size: 11px;
   padding: 2px 0;
+}
+.cmp-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr);
+  gap: 6px;
+  padding: 3px 5px 5px;
+  border-bottom: 1px solid rgba(94, 200, 255, 0.18);
+  margin-bottom: 4px;
+}
+.cmp-head .ca,
+.cmp-head .cb {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--cyan);
+  font-variant-numeric: tabular-nums;
+}
+.cmp-head .cb {
+  text-align: right;
+  color: var(--accent);
+}
+.cmp-head .cl {
+  font-size: 9.5px;
+  color: var(--dim-2);
+  text-align: center;
+}
+.cmp-rows {
+  max-height: 260px;
+  overflow-y: auto;
+}
+.cmp-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr);
+  gap: 6px;
+  align-items: baseline;
+  padding: 3px 5px;
+  border-radius: 4px;
+  font-size: 10.5px;
+}
+.cmp-row:nth-child(odd) {
+  background: #0a0d15;
+}
+.cv {
+  color: #dbe3f2;
+  font-size: 11px;
+}
+.ca-v {
+  color: #a9d8f2;
+}
+.cb-v {
+  text-align: right;
+  color: #ffcda3;
+}
+.cmp-row .cl {
+  color: var(--dim);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+  line-height: 1.25;
+}
+.cmp-row .cl em {
+  font-style: normal;
+  font-size: 9.5px;
+  color: var(--dim-2);
+}
+.cmp-row .cl em.up {
+  color: #ffb072;
+}
+.cmp-row .cl em.down {
+  color: #7fd6a8;
+}
+.cmp-none {
+  padding: 8px 5px;
+  font-size: 10.5px;
+  color: var(--dim-2);
 }
 .dl {
   color: var(--dim);

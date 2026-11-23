@@ -1,52 +1,117 @@
 <template>
   <div class="tp">
+    <div class="tp-cats">
+      <button
+        v-for="c in cats"
+        :key="c.id"
+        class="cat"
+        :class="{ on: c.id === active }"
+        @click="active = c.id"
+      >
+        {{ c.name }}<em>{{ c.items.length }}</em>
+      </button>
+    </div>
     <div class="tp-grid">
       <button
-        v-for="t in items"
+        v-for="t in shown"
         :key="t.id"
         class="cell"
         :class="{ on: t.id === modelValue }"
-        :title="`${t.name} · ${t.gen}`"
-        @click="pick(t.id)"
+        :title="t.name"
+        @click="pick(t)"
       >
         <span class="thumb">
-          <img :src="t.url" alt="" loading="lazy" />
+          <img :src="thumb(t)" alt="" loading="lazy" />
         </span>
-        <span class="nm">{{ t.name }}</span>
+        <span class="nm">{{ t.tag }}</span>
       </button>
+    </div>
+    <div class="tp-foot">
+      {{ baseCount }} 类 × {{ VARIANT_COUNT + 1 }} 张 + 上传 {{ uploads.length }} 张 = {{ totalAll }} 张；当前分类 {{ shown.length }} 张
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { TextureAsset } from '../../core/types'
-import { canvasToDataURL } from '../../core/textures'
+import { canvasToDataURL, VARIANT_COUNT } from '../../core/textures'
+import { texVariant } from '../../core/doc'
+import { addTexture } from '../../core/store'
 
 const props = defineProps<{ textures: TextureAsset[]; modelValue: string }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: string): void; (e: 'pick'): void }>()
 
-const items = computed(() =>
-  props.textures.map((t) => ({
-    id: t.id,
-    name: t.name,
-    gen: t.gen,
-    url: t.dataUrl || safeThumb(t)
-  }))
-)
+type Item = TextureAsset & { tag: string }
 
-/** 生成失败（比如参数异常）时退回占位，避免整块面板崩掉 */
-function safeThumb(t: TextureAsset) {
+/** 基础贴图（程序化，未上传、非变形） */
+const bases = computed(() => props.textures.filter((t) => !t.dataUrl && !(t.params?.variant ?? 0)))
+/** 用户上传的贴图 */
+const uploads = computed(() => props.textures.filter((t) => !!t.dataUrl))
+
+const baseCount = computed(() => bases.value.length)
+const totalAll = computed(() => bases.value.length * (VARIANT_COUNT + 1) + uploads.value.length)
+
+const cats = computed(() => {
+  const out: Array<{ id: string; name: string; items: Item[] }> = bases.value.map((b) => ({
+    id: b.id,
+    name: b.name,
+    items: [
+      { ...b, tag: '原始' },
+      ...Array.from({ length: VARIANT_COUNT }, (_, k) => {
+        const v = texVariant(b, k + 1)
+        return { ...v, tag: `变形${k + 1}` } as Item
+      })
+    ]
+  }))
+  if (uploads.value.length) {
+    out.push({
+      id: '#upload',
+      name: '上传',
+      items: uploads.value.map((u) => ({ ...u, tag: '自传' }) as Item)
+    })
+  }
+  return out
+})
+
+const active = ref('')
+/** 当前选中贴图属于哪一类（变形按 id 反查基础类） */
+function catOf(id: string) {
+  const base = id.replace(/_v\d+$/, '')
+  return bases.value.some((b) => b.id === base) ? base : uploads.value.some((u) => u.id === id) ? '#upload' : bases.value[0]?.id || ''
+}
+watch(
+  () => props.modelValue,
+  (id) => {
+    if (!active.value) active.value = catOf(id)
+  },
+  { immediate: true }
+)
+watch(cats, (cs) => {
+  if (!cs.some((c) => c.id === active.value)) active.value = cs[0]?.id || ''
+})
+
+const shown = computed(() => {
+  const c = cats.value.find((x) => x.id === active.value)
+  if (c) return c.items
+  return cats.value.flatMap((x) => x.items)
+})
+
+function thumb(t: Item) {
+  if (t.dataUrl) return t.dataUrl
   try {
-    return canvasToDataURL(t.gen, t.params, 96)
+    return canvasToDataURL(t.gen, t.params, 72)
   } catch {
     return ''
   }
 }
 
-function pick(id: string) {
+function pick(t: Item) {
   emit('pick')
-  emit('update:modelValue', id)
+  if (!props.textures.some((x) => x.id === t.id)) {
+    addTexture({ id: t.id, name: t.name, gen: t.gen, params: t.params, dataUrl: t.dataUrl })
+  }
+  emit('update:modelValue', t.id)
 }
 </script>
 
@@ -56,20 +121,54 @@ function pick(id: string) {
   border-radius: 6px;
   background: #080a11;
   padding: 6px;
-  max-height: 238px;
-  overflow-y: auto;
+}
+.tp-cats {
+  display: flex;
+  gap: 3px;
+  overflow-x: auto;
+  padding-bottom: 5px;
+  margin-bottom: 5px;
+  border-bottom: 1px solid var(--line-soft);
+  scrollbar-width: thin;
+}
+.cat {
+  flex: 0 0 auto;
+  font-size: 9.5px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #0c0e16;
+  color: var(--dim);
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cat em {
+  font-style: normal;
+  font-size: 8.5px;
+  color: var(--dim-2);
+  margin-left: 2px;
+}
+.cat:hover {
+  color: #dbe3f2;
+}
+.cat.on {
+  color: var(--accent);
+  border-color: rgba(255, 138, 61, 0.45);
+  background: rgba(255, 138, 61, 0.1);
 }
 .tp-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 5px;
+  max-height: 236px;
+  overflow-y: auto;
 }
 .cell {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 4px 2px 3px;
+  gap: 2px;
+  padding: 3px 2px 2px;
   border-radius: 5px;
   border: 1px solid transparent;
   background: #0c0e16;
@@ -104,7 +203,7 @@ function pick(id: string) {
   opacity: 1;
 }
 .nm {
-  font-size: 9px;
+  font-size: 8.5px;
   color: var(--dim);
   max-width: 100%;
   overflow: hidden;
@@ -113,5 +212,12 @@ function pick(id: string) {
 }
 .cell.on .nm {
   color: var(--accent);
+}
+.tp-foot {
+  font-size: 9px;
+  color: var(--dim-2);
+  padding-top: 5px;
+  margin-top: 4px;
+  border-top: 1px solid var(--line-soft);
 }
 </style>
