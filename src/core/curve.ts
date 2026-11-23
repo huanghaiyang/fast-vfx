@@ -1,5 +1,5 @@
 import { Color } from 'three'
-import type { Curve, Gradient } from './types'
+import type { Curve, Gradient, Keyframe, Track, Vec3 } from './types'
 
 export const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v)
 export const lerp = (a: number, b: number, u: number) => a + (b - a) * u
@@ -29,6 +29,29 @@ export function buildCurveLUT(curve: Curve | undefined, size = 64): Float32Array
   const out = new Float32Array(size)
   for (let i = 0; i < size; i++) out[i] = evalCurve(curve, size === 1 ? 0 : i / (size - 1))
   return out
+}
+
+/** 轨道在某个时刻的取值：首尾外推取端点，中间按 smooth 决定线性/平滑 */
+export function sampleTrack(track: Track, time: number): number | Vec3 | null {
+  const keys: Keyframe[] = track.keys
+  if (!keys.length) return null
+  if (time <= keys[0].t) return keys[0].v
+  const last = keys[keys.length - 1]
+  if (time >= last.t) return last.v
+  for (let i = 0; i < keys.length - 1; i++) {
+    const a = keys[i]
+    const b = keys[i + 1]
+    if (time >= a.t && time <= b.t) {
+      const span = Math.max(1e-6, b.t - a.t)
+      let u = (time - a.t) / span
+      if (track.smooth) u = u * u * (3 - 2 * u)
+      if (Array.isArray(a.v) && Array.isArray(b.v)) {
+        return [a.v[0] + (b.v[0] - a.v[0]) * u, a.v[1] + (b.v[1] - a.v[1]) * u, a.v[2] + (b.v[2] - a.v[2]) * u] as Vec3
+      }
+      return (a.v as number) + ((b.v as number) - (a.v as number)) * u
+    }
+  }
+  return last.v
 }
 
 export function hexToRgb(hex: string): [number, number, number] {

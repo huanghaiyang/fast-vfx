@@ -12,6 +12,7 @@
         <div class="chips">
           <button class="chip" :class="{ on: S.doc.bloom }" @click="toggle('bloom')">✦ 泛光</button>
           <button class="chip" :class="{ on: S.doc.grid }" @click="toggle('grid')">▦ 网格</button>
+          <button class="chip" :class="{ on: S.showPaths }" title="显示位移轨道的轨迹线" @click="togglePaths">◈ 路径</button>
           <button class="chip" @click="A.captureCamera()">◎ 机位</button>
         </div>
       </div>
@@ -50,6 +51,11 @@ function toggle(key: 'bloom' | 'grid') {
   S.doc[key] = !S.doc[key]
 }
 
+function togglePaths() {
+  S.showPaths = !S.showPaths
+  S.version++
+}
+
 onMounted(() => {
   engine = new FXEngine(canvas.value!, S as any, {
     onSelect: (id) => {
@@ -82,6 +88,10 @@ watch(
 watch(
   () => S.mode,
   (m) => engine?.setMode(m)
+)
+watch(
+  () => S.showPaths,
+  () => engine?.sync()
 )
 
 onBeforeUnmount(() => {

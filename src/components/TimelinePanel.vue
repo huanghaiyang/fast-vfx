@@ -14,7 +14,12 @@
         <button :class="{ on: S.autoKey }" @click="S.autoKey = !S.autoKey">自动 K</button>
       </div>
       <div class="spacer"></div>
-      <span class="hint tl-hint">拖动播放头预览 · 拖动 ◆ 改时间 · 双击 ◆ 删除</span>
+      <div class="cmp" v-if="S.keySel.length === 2">
+        <span class="cmp-l">{{ S.keySel[0].t.toFixed(2) }}s</span>
+        <span class="cmp-m">⇄ 对比</span>
+        <span class="cmp-l">{{ S.keySel[1].t.toFixed(2) }}s</span>
+      </div>
+      <span class="hint tl-hint" v-if="S.keySel.length !== 2">拖 ◆ 改时间 · 双击 ◆ 删除 · Shift 点两帧对比</span>
       <button class="primary mini" :disabled="!S.selectedId" @click="addAllKeys">＋ 关键帧</button>
     </div>
 
@@ -41,10 +46,10 @@
             v-for="(k, i) in r.keys"
             :key="i"
             class="key"
-            :class="{ drag: dragKey === r.id + ':' + i }"
+            :class="{ drag: dragKey === r.id + ':' + i, sel: S.keySel.includes(k), cmp: S.keySel.length === 2 && S.keySel.includes(k) }"
             :style="{ left: Math.min(99.2, (k.t / S.doc.duration) * 100) + '%' }"
-            :title="k.t.toFixed(2) + 's'"
-            @pointerdown.stop="startKeyDrag(r.id, i, $event)"
+            :title="k.t.toFixed(2) + 's（Shift 点击可对比相邻两帧）'"
+            @pointerdown.stop="startKeyDrag(r.id, i, $event, k)"
             @dblclick.stop="A.removeKey(r.id, i)"
           ></div>
         </div>
@@ -58,7 +63,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { S, A, pushHistory } from '../core/store'
-import type { TrackProperty } from '../core/types'
+import type { Keyframe, TrackProperty } from '../core/types'
 
 const area = ref<HTMLDivElement>()
 const dragKey = ref('')
@@ -112,6 +117,7 @@ function timeFromEvent(e: PointerEvent | MouseEvent) {
 function onAreaDown(e: PointerEvent) {
   if ((e.target as HTMLElement).classList.contains('key')) return
   S.playing = false
+  A.clearKeySel()
   A.setTime(timeFromEvent(e))
   const move = (ev: PointerEvent) => {
     A.setTime(timeFromEvent(ev))
@@ -124,10 +130,11 @@ function onAreaDown(e: PointerEvent) {
   window.addEventListener('pointerup', up)
 }
 
-function startKeyDrag(trackId: string, index: number, e: PointerEvent) {
+function startKeyDrag(trackId: string, index: number, e: PointerEvent, key: Keyframe) {
   e.preventDefault()
   const tr = S.doc.tracks.find((t) => t.id === trackId)
   if (!tr) return
+  A.selectKey(trackId, key, e.shiftKey)
   pushHistory()
   dragKey.value = trackId + ':' + index
   S.playing = false
@@ -345,6 +352,32 @@ function toggleLoop() {
 .key.drag {
   background: #ffd2a8;
   box-shadow: 0 0 10px rgba(255, 170, 90, 0.9);
+}
+.key.sel {
+  background: var(--cyan);
+  box-shadow: 0 0 0 1px rgba(94, 200, 255, 0.55), 0 0 12px rgba(94, 200, 255, 0.85);
+}
+.key.sel.cmp {
+  background: #c9f0ff;
+  box-shadow: 0 0 0 1px rgba(94, 200, 255, 0.9), 0 0 16px rgba(94, 200, 255, 1);
+}
+.cmp {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid rgba(94, 200, 255, 0.35);
+  background: rgba(94, 200, 255, 0.08);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+.cmp .cmp-l {
+  color: #bfe8ff;
+}
+.cmp .cmp-m {
+  color: var(--cyan);
+  font-size: 10px;
 }
 .playhead {
   position: absolute;

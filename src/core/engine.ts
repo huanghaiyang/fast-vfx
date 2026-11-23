@@ -20,6 +20,8 @@ export interface EngineState {
   playing: boolean
   mode: GizmoMode
   autoKey: boolean
+  /** 是否在视口里画出位移轨道的轨迹线（默认画） */
+  showPaths?: boolean
 }
 
 export interface EngineCallbacks {
@@ -56,6 +58,8 @@ export class FXEngine {
   private gizmo: TransformControls
   private grid: THREE.GridHelper
   private boxHelper: THREE.BoxHelper
+  private pathGroup = new THREE.Group()
+  private pathMarkers = new Map<string, THREE.Mesh>()
   private runtimes = new Map<string, Runtime>()
   private raycaster = new THREE.Raycaster()
   private pointerDown = { x: 0, y: 0, time: 0 }
@@ -117,6 +121,7 @@ export class FXEngine {
     ;(this.boxHelper.material as THREE.LineBasicMaterial).opacity = 0.9
     this.boxHelper.visible = false
     this.scene.add(this.boxHelper)
+    this.scene.add(this.pathGroup)
 
     this.composer = new EffectComposer(this.renderer)
     this.composer.addPass(new RenderPass(this.scene, this.camera))
@@ -197,7 +202,69 @@ export class FXEngine {
       this.applyCamera(true)
     }
     if (this.state.selectedId !== this.selectedId) this.setSelection(this.state.selectedId)
+    this.syncPaths()
     this.dirty = true
+  }
+
+  /* ---------------------------- 位移轨道轨迹线 ---------------------------- */
+  /** 把每条 position 轨道按时间采样成一条折线，并标出关键帧位置与当前时间点 */
+  private syncPaths() {
+    for (const child of [...this.pathGroup.children]) {
+      const geo = (child as THREE.Mesh).geometry
+      geo?.dispose()
+      const mat = (child as THREE.Mesh).material
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
+      else mat?.dispose()
+      this.pathGroup.remove(child)
+    }
+    this.pathMarkers.clear()
+    if (this.state.showPaths === false) return
+    const doc = this.state.doc
+    for (const obj of doc.objects) {
+      const tr = doc.tracks.find((t) => t.targetId === obj.id && t.property === 'position')
+      if (!tr || tr.keys.length < 2) continue
+      const selected = obj.id === this.selectedId
+      const color = selected ? 0x5ec8ff : 0xff8a3d
+      const alpha = selected ? 0.95 : 0.42
+      const steps = Math.max(48, Math.min(240, Math.round(doc.duration * 80)))
+      const pts: THREE.Vector3[] = []
+      for (let i = 0; i <= steps; i++) {
+        const v = this.sampleValue(tr, (i / steps) * doc.duration)
+        if (Array.isArray(v)) pts.push(new THREE.Vector3(v[0], v[1], v[2]))
+      }
+      const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({ color, transparent: true, opacity: alpha, depthWrite: false })
+      )
+      line.userData.pathFor = obj.id
+      line.renderOrder = 3
+      this.pathGroup.add(line)
+
+      const kPts: THREE.Vector3[] = []
+      for (const k of tr.keys) if (Array.isArray(k.v)) kPts.push(new THREE.Vector3(k.v[0], k.v[1], k.v[2]))
+      const dots = new THREE.Points(
+        new THREE.BufferGeometry().setFromPoints(kPts),
+        new THREE.PointsMaterial({
+          color,
+          size: selected ? 0.12 : 0.075,
+          sizeAttenuation: true,
+          transparent: true,
+          opacity: 0.95,
+          depthWrite: false
+        })
+      )
+      dots.renderOrder = 4
+      this.pathGroup.add(dots)
+
+      const marker = new THREE.Mesh(
+        new THREE.SphereGeometry(selected ? 0.07 : 0.05, 12, 10),
+        new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.9 })
+      )
+      marker.renderOrder = 5
+      marker.userData.pathFor = obj.id
+      this.pathGroup.add(marker)
+      this.pathMarkers.set(obj.id, marker)
+    }
   }
 
   private createRuntime(obj: FXObject): Runtime {
@@ -401,6 +468,10 @@ export class FXEngine {
         rt.particle.setOpacity(opacity * rt.particle.doc.render.opacity)
       }
     }
+    for (const [id, marker] of this.pathMarkers) {
+      const rt = this.runtimes.get(id)
+      if (rt) marker.position.copy(rt.group.position)
+    }
     this.updateSelectionHelper()
   }
 
@@ -524,6 +595,7 @@ export class FXEngine {
       this.gizmo.detach()
     }
     this.updateSelectionHelper()
+    this.syncPaths()
   }
 
   setMode(mode: GizmoMode) {
@@ -604,6 +676,13 @@ export class FXEngine {
       rt.particle?.dispose()
       rt.mesh?.geometry.dispose()
       rt.material?.dispose()
+    }
+    for (const child of [...this.pathGroup.children]) {
+      const geo = (child as THREE.Mesh).geometry
+      geo?.dispose()
+      const mat = (child as THREE.Mesh).material
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
+      else mat?.dispose()
     }
     this.composer.dispose()
     this.renderer.dispose()

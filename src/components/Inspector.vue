@@ -1,12 +1,14 @@
 <template>
   <aside class="panel right">
     <div class="panel-head">
-      <span class="panel-title">{{ sel ? '属性' : '特效设置' }}</span>
-      <span class="tag" v-if="sel">{{ sel.kind === 'particles' ? '粒子' : '模型' }}</span>
+      <span class="panel-title">{{ S.keySel.length ? '关键帧' : sel ? '属性' : '特效设置' }}</span>
+      <span class="tag" v-if="S.keySel.length">{{ S.keySel.length === 2 ? '两帧比对' : '单帧' }}</span>
+      <span class="tag" v-else-if="sel">{{ sel.kind === 'particles' ? '粒子' : '模型' }}</span>
     </div>
 
     <div class="panel-body">
-      <template v-if="sel">
+      <KeyframeInspector v-if="S.keySel.length" />
+      <template v-else-if="sel">
         <div class="obj-head">
           <input class="obj-name" type="text" v-model="sel.name" spellcheck="false" @focus="pushHistory" />
           <button class="icon ghost" :title="sel.visible ? '隐藏' : '显示'" @click="sel.visible = !sel.visible">
@@ -99,6 +101,7 @@ import SliderRow from './ui/SliderRow.vue'
 import VecField from './ui/VecField.vue'
 import ParticleInspector from './ParticleInspector.vue'
 import ModelInspector from './ModelInspector.vue'
+import KeyframeInspector from './KeyframeInspector.vue'
 
 const sel = computed(() => S.doc.objects.find((o) => o.id === S.selectedId) || null)
 

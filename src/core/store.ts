@@ -1,5 +1,5 @@
 import { reactive, watch } from 'vue'
-import type { EffectDoc, FXObject, TrackProperty, Vec3 } from './types'
+import type { EffectDoc, FXObject, Keyframe, Track, TrackProperty, Vec3 } from './types'
 import { BASE_TEXTURES, cloneDoc, createImportedModel, createModel, createParticle, emptyDoc, mergeTrack } from './doc'
 import { PRESETS } from './presets'
 import type { FXEngine, GizmoMode } from './engine'
@@ -10,6 +10,10 @@ import { deleteServerModel, listServerModels } from './assets'
 export const S = reactive({
   doc: PRESETS[0].build() as EffectDoc,
   selectedId: null as string | null,
+  /** 时间轴上被选中的关键帧（最多两个，选两个即进入对比） */
+  keySel: [] as Keyframe[],
+  /** 视口里是否画出位移轨道的轨迹线 */
+  showPaths: true,
   time: 0,
   playing: true,
   mode: 'translate' as GizmoMode,
@@ -58,6 +62,7 @@ export function pushHistory() {
 function restore(snap: string) {
   S.doc = JSON.parse(snap) as EffectDoc
   if (S.selectedId && !S.doc.objects.some((o) => o.id === S.selectedId)) S.selectedId = null
+  S.keySel = []
   S.time = Math.min(S.time, S.doc.duration)
   S.version++
 }
@@ -141,6 +146,7 @@ export const A = {
     doc.textures = mergeTextures(doc)
     S.doc = doc
     S.selectedId = null
+    S.keySel = []
     S.time = 0
     S.playing = true
     S.version++
@@ -154,6 +160,7 @@ export const A = {
     doc.objects.push(createModel('plane', { name: '地面', transform: { position: [0, 0, 0], rotation: [-90, 0, 0], scale: [1, 1, 1] } }))
     S.doc = doc
     S.selectedId = null
+    S.keySel = []
     S.time = 0
     S.version++
     engineRef?.sync()
@@ -205,8 +212,62 @@ export const A = {
     pushHistory()
     const tr = S.doc.tracks.find((t) => t.id === trackId)
     if (!tr) return
+    const key = tr.keys[index]
+    if (key) S.keySel = S.keySel.filter((k) => k !== key)
     tr.keys.splice(index, 1)
     if (!tr.keys.length) S.doc.tracks = S.doc.tracks.filter((t) => t.id !== trackId)
+    S.version++
+  },
+
+  /* --------------------------- 关键帧选择 / 编辑 --------------------------- */
+  selectKey(trackId: string, key: Keyframe, additive = false) {
+    const tr = S.doc.tracks.find((t) => t.id === trackId)
+    if (!tr) return
+    if (!additive) {
+      S.keySel = [key]
+    } else {
+      const i = S.keySel.indexOf(key)
+      if (i >= 0) S.keySel.splice(i, 1)
+      else if (S.keySel.length === 0) S.keySel = [key]
+      else {
+        const curTrackId = trackOfKey(S.keySel[0])?.id
+        if (curTrackId !== tr.id) S.keySel = [key] // 换了轨道就从单帧重新开始
+        else {
+          S.keySel.push(key)
+          if (S.keySel.length > 2) S.keySel.shift()
+        }
+      }
+    }
+    S.selectedId = tr.targetId
+    S.playing = false
+    S.time = key.t
+    S.version++
+  },
+
+  clearKeySel() {
+    S.keySel = []
+  },
+
+  setKeyTime(trackId: string, key: Keyframe, t: number) {
+    const tr = S.doc.tracks.find((x) => x.id === trackId)
+    if (!tr) return
+    pushHistory()
+    key.t = Math.max(0, Math.min(S.doc.duration, t))
+    tr.keys.sort((a, b) => a.t - b.t)
+    S.version++
+  },
+
+  setKeyValue(key: Keyframe, v: number | Vec3) {
+    pushHistory()
+    key.v = v
+    S.version++
+  },
+
+  setTrackSmooth(trackId: string, smooth: boolean) {
+    const tr = S.doc.tracks.find((x) => x.id === trackId)
+    if (!tr) return
+    pushHistory()
+    tr.smooth = smooth
     S.version++
   },
 
@@ -256,6 +317,16 @@ function readProperty(obj: FXObject, property: TrackProperty): number | Vec3 | n
   if (property === 'clusters') return obj.clusters
   if (property === 'size') return obj.sizeBase
   return null
+}
+
+/** 找到某个关键帧所在的轨道 */
+export function trackOfKey(key: Keyframe): Track | null {
+  for (const t of S.doc.tracks) if (t.keys.includes(key)) return t
+  return null
+}
+
+export function keyIndexOf(track: Track, key: Keyframe): number {
+  return track.keys.indexOf(key)
 }
 
 function mergeTextures(doc: EffectDoc): EffectDoc['textures'] {  const ids = new Set(doc.textures.map((t) => t.id))
@@ -428,6 +499,7 @@ export async function importProject(file: File) {
     if (!doc.modelAssets) doc.modelAssets = []
     S.doc = doc
     S.selectedId = null
+    S.keySel = []
     S.time = 0
     S.version++
     engineRef?.sync()

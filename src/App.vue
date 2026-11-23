@@ -114,6 +114,23 @@ onMounted(() => {
       if (a) addImportedModel(a.id)
     })()
   }
+  // 调试：?key=0:1,2 选中第 0 条轨道的第 1、2 个关键帧（两个即进入比对）
+  const kq = q.get('key')
+  if (kq) {
+    const [ti, list] = kq.split(':')
+    const tr = S.doc.tracks[parseInt(ti || '0', 10)]
+    if (tr) {
+      const idx = (list || '0')
+        .split(',')
+        .map((n) => parseInt(n, 10))
+        .filter((n) => !isNaN(n))
+      const keys = idx.map((i) => tr.keys[i]).filter(Boolean)
+      if (keys.length) {
+        A.selectKey(tr.id, keys[0], false)
+        for (const k of keys.slice(1)) A.selectKey(tr.id, k, true)
+      }
+    }
+  }
 })
 
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
