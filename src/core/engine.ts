@@ -206,6 +206,12 @@ export class FXEngine {
     this.dirty = true
   }
 
+  /** 单独开关轨迹显示：只重建轨迹线，不触发 sync / 粒子重模拟 */
+  setShowPaths(v: boolean) {
+    this.state.showPaths = v
+    this.syncPaths()
+  }
+
   /* ---------------------------- 位移轨道轨迹线 ---------------------------- */
   /** 把每条 position 轨道按时间采样成一条折线，并标出关键帧位置与当前时间点 */
   private syncPaths() {
@@ -224,7 +230,8 @@ export class FXEngine {
       const tr = doc.tracks.find((t) => t.targetId === obj.id && t.property === 'position')
       if (!tr || tr.keys.length < 2) continue
       const selected = obj.id === this.selectedId
-      const color = selected ? 0x5ec8ff : 0xff8a3d
+      // 亮度压到 bloom 阈值（0.86）以下：轨迹是辅助线，不该给舞台加光
+      const color = new THREE.Color(selected ? 0x5ec8ff : 0xff8a3d).multiplyScalar(selected ? 0.6 : 0.46)
       const alpha = selected ? 0.95 : 0.42
       const steps = Math.max(48, Math.min(240, Math.round(doc.duration * 80)))
       const pts: THREE.Vector3[] = []

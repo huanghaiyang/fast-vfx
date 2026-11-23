@@ -127,6 +127,30 @@ export class ParticleSystem {
   private colorLUT: Float32Array = new Float32Array(64 * 3)
   private lutKey = ''
 
+  /** 固定种子的伪随机：暂停后重新 seek 必须复现同一帧，否则切个开关画面就换样 */
+  private randState = 0x9e3779b9
+
+  private seedRand(key: string) {
+    let h = 2166136261
+    for (let i = 0; i < key.length; i++) {
+      h ^= key.charCodeAt(i)
+      h = Math.imul(h, 16777619)
+    }
+    this.randState = (h >>> 0) || 0x9e3779b9
+  }
+
+  /** xorshift32，约 1e-9 的周期误差，对粒子抖动完全够用 */
+  private rand() {
+    let x = this.randState
+    x ^= x << 13
+    x >>>= 0
+    x ^= x >>> 17
+    x ^= x << 5
+    x >>>= 0
+    this.randState = x
+    return x / 4294967296
+  }
+
   doc: ParticleDoc
   texture: THREE.Texture
 
@@ -176,6 +200,7 @@ export class ParticleSystem {
     this.texture = getTexture(this.findTexture(textures))
     this.mat.uniforms.uMap.value = this.texture
     this.setMax(doc.render.maxCount)
+    this.seedRand(doc.name)
     this.applySettings(textures)
   }
 
@@ -330,6 +355,7 @@ export class ParticleSystem {
     this.burstTimer = 0
     this.emitElapsed = 0
     this.emitStarted = false
+    this.seedRand(this.doc.name)
   }
 
   private sampleDir(base: THREE.Vector3, spreadDeg: number, out: THREE.Vector3) {
@@ -339,9 +365,9 @@ export class ParticleSystem {
       return out
     }
     // 圆锥内均匀采样
-    const cosT = lerp(Math.cos(spread), 1, Math.random())
+    const cosT = lerp(Math.cos(spread), 1, this.rand())
     const sinT = Math.sqrt(Math.max(0, 1 - cosT * cosT))
-    const phi = Math.random() * Math.PI * 2
+    const phi = this.rand() * Math.PI * 2
     const t1 = new THREE.Vector3()
     const t2 = new THREE.Vector3()
     if (Math.abs(base.y) > 0.99) t1.set(1, 0, 0)
@@ -364,7 +390,7 @@ export class ParticleSystem {
     const i = this.count++
 
     this.ensureClusters()
-    const cp = this.clusterPos[Math.floor(Math.random() * this.clusterPos.length)] || [0, 0, 0]
+    const cp = this.clusterPos[Math.floor(this.rand() * this.clusterPos.length)] || [0, 0, 0]
     const emitRadius = this.overrides.radius ?? e.radius
 
     const shape: ShapeKind = e.shape
@@ -375,15 +401,15 @@ export class ParticleSystem {
     let ny = 0
     let nz = 0
 
-    const rnd = (a: number, b: number) => a + Math.random() * (b - a)
+    const rnd = (a: number, b: number) => a + this.rand() * (b - a)
 
     switch (shape) {
       case 'sphere': {
-        const u = Math.random()
-        const v = Math.random()
+        const u = this.rand()
+        const v = this.rand()
         const theta = u * Math.PI * 2
         const phi = Math.acos(2 * v - 1)
-        const rad = e.surface ? emitRadius : emitRadius * Math.cbrt(Math.random())
+        const rad = e.surface ? emitRadius : emitRadius * Math.cbrt(this.rand())
         nx = Math.sin(phi) * Math.cos(theta)
         ny = Math.cos(phi)
         nz = Math.sin(phi) * Math.sin(theta)
@@ -398,22 +424,22 @@ export class ParticleSystem {
         oz += rnd(-e.size[2] / 2, e.size[2] / 2)
         break
       case 'circle': {
-        const a = Math.random() * Math.PI * 2
-        const r = emitRadius * Math.sqrt(Math.random())
+        const a = this.rand() * Math.PI * 2
+        const r = emitRadius * Math.sqrt(this.rand())
         ox += Math.cos(a) * r
         oz += Math.sin(a) * r
         break
       }
       case 'ring': {
-        const a = Math.random() * Math.PI * 2
+        const a = this.rand() * Math.PI * 2
         const r = emitRadius + rnd(-0.06, 0.06) * emitRadius
         ox += Math.cos(a) * r
         oz += Math.sin(a) * r
         break
       }
       case 'cone': {
-        const a = Math.random() * Math.PI * 2
-        const r = emitRadius * Math.sqrt(Math.random())
+        const a = this.rand() * Math.PI * 2
+        const r = emitRadius * Math.sqrt(this.rand())
         ox += Math.cos(a) * r
         oz += Math.sin(a) * r
         break
@@ -447,7 +473,7 @@ export class ParticleSystem {
     this.life[i] = Math.max(0.02, rnd(e.lifetimeMin, e.lifetimeMax))
     this.angle[i] = THREE.MathUtils.degToRad(rnd(s.angleMin, s.angleMax))
     this.angVel[i] = THREE.MathUtils.degToRad(rnd(s.speedMin, s.speedMax))
-    this.seed[i] = Math.random()
+    this.seed[i] = this.rand()
   }
 
   /** 只推进模拟，不写属性（预演/快进用） */

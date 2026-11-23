@@ -53,7 +53,6 @@ function toggle(key: 'bloom' | 'grid') {
 
 function togglePaths() {
   S.showPaths = !S.showPaths
-  S.version++
 }
 
 onMounted(() => {
@@ -91,7 +90,7 @@ watch(
 )
 watch(
   () => S.showPaths,
-  () => engine?.sync()
+  (v) => engine?.setShowPaths(v)
 )
 
 onBeforeUnmount(() => {

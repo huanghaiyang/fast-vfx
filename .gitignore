@@ -29,3 +29,6 @@ Thumbs.db
 # 导出临时包（Godot 资源包由界面一键下载，不入库）
 *.zip
 export-tmp/
+
+# 本地 dev server 日志
+.dev-server.log
