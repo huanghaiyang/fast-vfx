@@ -3001,6 +3001,95 @@ function buildBurst(): EffectDoc {
   return doc
 }
 
+function buildShatter(): EffectDoc {
+  const doc = emptyDoc('冰晶碎裂')
+  doc.duration = 2.0
+  doc.bloomStrength = 0.55
+  doc.camera = { position: [0, 2.1, 6.0], target: [0, 1.0, 0], fov: 46 }
+
+  // 爆点：冷白闪光贴片，短促一闪
+  const flash = createParticle({
+    name: '冰爆闪光',
+    transform: { position: [0, 1.0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+    emission: { rate: 0, burst: true, burstCount: 2, burstInterval: 0, shape: 'point', radius: 0.06, lifetimeMin: 0.4, lifetimeMax: 0.4, duration: 0.04 },
+    motion: {
+      speedMin: 0,
+      speedMax: 0.1,
+      direction: [0, 1, 0],
+      spread: 5,
+      gravity: [0, 0, 0],
+      damping: 2,
+      turbulence: 0,
+      turbulenceScale: 1
+    },
+    sizeBase: 0.85,
+    sizeCurve: c([
+      [0, 1],
+      [1, 1.05]
+    ]),
+    gradient: grad([
+      [0, '#ffffff'],
+      [0.35, '#bfeaff'],
+      [1, '#3f7fbf']
+    ]),
+    brightness: 1.5,
+    spin: { angleMin: 0, angleMax: 360, speedMin: 0, speedMax: 0, align: 0, stretch: 0 },
+    render: { textureId: 'tex_flash', blend: 'additive', maxCount: 120, opacity: 0.85, fadeIn: 0.02, fadeOut: 0.12 }
+  })
+
+  // 冰晶碎块：实体八面体，落地弹跳后停住
+  const crystals = createParticle({
+    name: '冰晶碎块',
+    transform: { position: [0, 1.0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+    emission: { rate: 0, burst: true, burstCount: 58, burstInterval: 0, shape: 'sphere', radius: 0.1, lifetimeMin: 1.0, lifetimeMax: 1.6, duration: 0.05 },
+    motion: {
+      speedMin: 1.4,
+      speedMax: 4.2,
+      direction: [0, 1, 0],
+      spread: 82,
+      gravity: [0, -3.4, 0],
+      damping: 0.45,
+      turbulence: 0.3,
+      turbulenceScale: 2.2
+    },
+    sizeBase: 0.14,
+    sizeCurve: c([
+      [0, 1],
+      [1, 0.7]
+    ]),
+    gradient: grad([
+      [0, '#f4fdff'],
+      [0.45, '#91d8ff'],
+      [1, '#16324f']
+    ]),
+    brightness: 1.15,
+    spin: { angleMin: 0, angleMax: 360, speedMin: -180, speedMax: 180, align: 0, stretch: 0 },
+    render: {
+      textureId: 'tex_spark',
+      blend: 'additive',
+      maxCount: 400,
+      opacity: 0.95,
+      fadeIn: 0.02,
+      fadeOut: 0.3,
+      mode: 'mesh',
+      meshGeo: 'crystal'
+    }
+  })
+  crystals.collide = { enabled: true, floor: 0.02, bounce: 0.32, friction: 0.55, kill: false }
+
+  // 地面冷光
+  const ground = glowDisc('地面冷光', 1.7, 0.1, '#7fd4ff', '#1c4f8a', 0.03)
+  doc.objects = [flash, crystals, ground]
+  doc.tracks = [
+    track(ground.id, 'opacity', [
+      [0, 0.85],
+      [0.3, 0.5],
+      [1.1, 0.05]
+    ])
+  ]
+  return doc
+}
+
 export const PRESETS: Preset[] = [
   { id: 'fire', name: '烈焰', desc: '锥形火焰 + 火星，循环燃烧', tag: '火焰', accent: '#ff7a1a', build: buildFire },
   { id: 'jet', name: '烈焰喷射', desc: '定向火舌 + 尾焰烟，持续喷射', tag: '火焰', accent: '#ffa53a', build: buildJet },
@@ -3024,6 +3113,7 @@ export const PRESETS: Preset[] = [
   { id: 'shadow', name: '暗影侵蚀', desc: '缠绕核心 + 黑雾 + 暗影碎片', tag: '法术', accent: '#a06bff', build: buildShadow },
   { id: 'portal', name: '虚空裂隙', desc: '旋转裂隙 + 虚空核 + 螺旋微粒', tag: '法术', accent: '#c86bff', build: buildPortal },
   { id: 'heal', name: '治疗光环', desc: '上升光点 + 叶影，绿色循环', tag: '法术', accent: '#41ff9e', build: buildHeal },
+  { id: 'shatter', name: '冰晶碎裂', desc: '实体冰晶爆散 + 落地弹跳 + 冷光闪爆', tag: '元素', accent: '#8fe0ff', build: buildShatter },
   { id: 'subemit', name: '子发射演示', desc: '触地溅射 + 寿命碎裂，验证子发射与生命曲线', tag: '演示', accent: '#ff9a3c', build: buildSubEmit },
   { id: 'burst', name: '冲击爆点', desc: '序列帧爆闪 + 带地面反弹的碎石飞溅', tag: '演示', accent: '#ffb545', build: buildBurst }
 ]
