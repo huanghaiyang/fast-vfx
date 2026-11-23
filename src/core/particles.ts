@@ -13,6 +13,7 @@ attribute float iStretch;
 attribute float iSeed;
 
 uniform float uAlign;
+uniform float uAxis;
 
 varying vec4 vColor;
 varying vec2 vUv;
@@ -26,13 +27,16 @@ void main() {
   vec4 mv = modelViewMatrix * vec4(iPos, 1.0);
 
   float ang = iRot;
+  // 竖向贴图（火焰 / 光束）不参与自由旋转，否则朝向速度方向时会被翻 180°
+  if (uAxis > 0.5) ang = 0.0;
   if (uAlign > 0.001) {
     vec3 vv = (modelViewMatrix * vec4(iVel, 0.0)).xyz;
     if (length(vv.xy) > 1e-5) {
-      float target = atan(vv.y, vv.x) - 1.5707963;
+      // uAxis=1: 贴图 +Y 沿速度；否则 +X 沿速度（横向拖尾贴图）
+      float target = uAxis > 0.5 ? atan(-vv.x, vv.y) : atan(vv.y, vv.x) - 1.5707963;
       ang = mix(ang, target, uAlign);
       // 对齐后再抖一点，避免所有粒子朝向完全一致而显出贴图重复
-      ang += (iSeed - 0.5) * 0.5;
+      ang += (iSeed - 0.5) * (uAxis > 0.5 ? 0.34 : 0.5);
     }
   }
 
@@ -44,6 +48,11 @@ void main() {
   vec2 rq = vec2(q.x * c - q.y * s, q.x * s + q.y * c);
 
   mv.xy += rq * iSize;
+  // 竖向贴图往生长方向偏一点，火舌从粒子位置向上窜，避免上下对称堆成一团
+  if (uAxis > 0.5) {
+    float lift = 0.34 * (1.0 + iStretch) * iSize;
+    mv.xy += vec2(-s, c) * lift;
+  }
   gl_Position = projectionMatrix * mv;
 }
 `
@@ -54,6 +63,8 @@ uniform float uOpacity;
 uniform float uTime;
 uniform float uHot;
 uniform float uFlicker;
+uniform float uFlipV;
+uniform float uAxis;
 
 varying vec4 vColor;
 varying vec2 vUv;
@@ -61,9 +72,10 @@ varying float vSeed;
 
 void main() {
   // 每颗粒子随机镜像 UV，消除同一张贴图反复出现的复制感
+  // 有方向的竖贴图（火焰 / 光束）关掉纵向镜像，否则会被上下翻转
   vec2 uv = vUv;
   float sx = mod(floor(vSeed * 7.0), 2.0);
-  float sy = mod(floor(vSeed * 13.0), 2.0);
+  float sy = mod(floor(vSeed * 13.0), 2.0) * uFlipV;
   uv = vec2(sx > 0.5 ? 1.0 - uv.x : uv.x, sy > 0.5 ? 1.0 - uv.y : uv.y);
 
   vec4 t = texture2D(uMap, uv);
@@ -77,6 +89,8 @@ void main() {
   float flick = mix(1.0, 0.84 + 0.16 * sin(uTime * 7.3 + vSeed * 24.0), uFlicker);
 
   float a = t.a * vColor.a * uOpacity * feather * flick;
+  // 竖向贴图软化根部，防止所有火舌底边对齐后拉出一条亮线
+  if (uAxis > 0.5) a *= smoothstep(0.0, 0.22, vUv.y);
   if (a <= 0.004) discard;
 
   // 白热核心：只让最密的中心过曝，其余保持彩色
@@ -175,7 +189,9 @@ export class ParticleSystem {
         uAlign: { value: 0 },
         uTime: { value: 0 },
         uHot: { value: 0.45 },
-        uFlicker: { value: 0.8 }
+        uFlicker: { value: 0.8 },
+        uAxis: { value: 0 },
+        uFlipV: { value: 1 }
       },
       transparent: true,
       depthWrite: false,
@@ -330,6 +346,11 @@ export class ParticleSystem {
         this.mat.uniforms.uFlicker.value = 0.8
     }
     const asset = this.findTexture(textures)
+    // 竖向有方向性的贴图：+Y 沿速度对齐，且不做纵向镜像（否则火焰会上下颠倒）
+    const gen = asset?.gen || ''
+    const vertical = gen === 'flame' || gen === 'beam'
+    this.mat.uniforms.uAxis.value = vertical ? 1 : 0
+    this.mat.uniforms.uFlipV.value = vertical ? 0 : 1
     // 烟雾层不该有白热核，否则大团粒子会整片过曝
     const hot = r.textureId === 'tex_smoke' ? 0.05 : 0.18
     if (this.mat.blending === THREE.AdditiveBlending) this.mat.uniforms.uHot.value = hot

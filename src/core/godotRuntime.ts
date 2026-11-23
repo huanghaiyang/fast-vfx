@@ -273,6 +273,13 @@ func _make_process(ps: Dictionary, base_dir: String) -> ParticleProcessMaterial:
 	m.angular_velocity_min = deg_to_rad(float(ps.get("angular_velocity_min", 0.0)))
 	m.angular_velocity_max = deg_to_rad(float(ps.get("angular_velocity_max", 0.0)))
 
+	# 竖向贴图（火焰 / 光束）不参与自由旋转，否则贴图会被上下翻转
+	if bool(ps.get("vertical", false)):
+		m.angle_min = deg_to_rad(-9.0)
+		m.angle_max = deg_to_rad(9.0)
+		m.angular_velocity_min = 0.0
+		m.angular_velocity_max = 0.0
+
 	if "particle_flag_align_y" in m:
 		m.particle_flag_align_y = float(ps.get("stretch", 0.0)) > 0.001
 

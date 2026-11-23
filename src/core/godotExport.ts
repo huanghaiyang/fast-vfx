@@ -54,7 +54,7 @@ function canvasToBlob(asset: TextureAsset): Promise<Blob> {
 }
 
 /* -------------------------------- 粒子 -------------------------------- */
-function exportParticles(p: ParticleDoc, texPath: string | null) {
+function exportParticles(p: ParticleDoc, texPath: string | null, vertical = false) {
   const e = p.emission
   const m = p.motion
   const s = p.spin
@@ -114,7 +114,9 @@ function exportParticles(p: ParticleDoc, texPath: string | null) {
     texture: texPath || '',
     blend: r.blend === 'additive' ? 'additive' : 'alpha',
     stretch: round(s.stretch, 4),
-    align: round(s.align, 3)
+    align: round(s.align, 3),
+    // 竖向贴图（火焰 / 光束）在游戏引擎里也不做自由旋转，保持直立
+    vertical
   }
 }
 
@@ -255,7 +257,8 @@ export async function buildGodotPackage(doc: EffectDoc): Promise<GodotPackage> {
     }
     if (o.kind === 'particles') {
       const tex = o.render.textureId ? texFolder[o.render.textureId]?.file || '' : ''
-      return { ...base, particles: exportParticles(o, tex) }
+      const gen = doc.textures.find((t) => t.id === o.render.textureId)?.gen || ''
+      return { ...base, particles: exportParticles(o, tex, gen === 'flame' || gen === 'beam') }
     }
     const mat = exportMaterial(o)
     return {

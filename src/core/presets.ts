@@ -120,7 +120,7 @@ function buildFire(): EffectDoc {
     ]),
     brightness: 0.72,
     spin: { angleMin: 0, angleMax: 360, speedMin: -32, speedMax: 32, align: 0.82, stretch: 0.07 },
-    render: { textureId: 'tex_flame', blend: 'additive', maxCount: 3000, opacity: 0.4, fadeIn: 0.1, fadeOut: 0.4 }
+    render: { textureId: 'tex_flame', blend: 'additive', maxCount: 3000, opacity: 0.3, fadeIn: 0.1, fadeOut: 0.4 }
   })
   fire.clusters = 4
   fire.clusterRadius = 0.34
